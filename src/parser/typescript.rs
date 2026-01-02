@@ -1501,7 +1501,7 @@ mod tests {
         assert!(comments.file_block.is_some());
         let block = comments.file_block.unwrap();
         assert!(block.purpose.is_some());
-        assert!(block.purpose.unwrap().contains("Sample TypeScript"));
+        assert!(block.purpose.unwrap().starts_with("Sample TypeScript"));
     }
 
     #[test]
@@ -1618,6 +1618,10 @@ do-not:
         let block = parser.parse_toon_block(content);
 
         assert!(block.purpose.is_some());
+        let purpose = block.purpose.unwrap();
+        // Critical: verify "purpose:" prefix is stripped
+        assert_eq!(purpose, "Test purpose line", "Purpose should not include 'purpose:' prefix");
+
         assert!(block.when_editing.is_some());
         let we = block.when_editing.unwrap();
         assert_eq!(we.len(), 2);
@@ -1626,5 +1630,12 @@ do-not:
 
         assert!(block.invariants.is_some());
         assert!(block.do_not.is_some());
+    }
+
+    #[test]
+    fn test_purpose_prefix_stripped() {
+        let parser = TypeScriptParser::new();
+        let block = parser.parse_toon_block("purpose: My description");
+        assert_eq!(block.purpose.unwrap(), "My description");
     }
 }

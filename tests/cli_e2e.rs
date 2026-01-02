@@ -6,6 +6,40 @@ fn bin() -> Command {
     Command::new(env!("CARGO_BIN_EXE_luny"))
 }
 
+/// Golden test: verify exact output for a known input
+#[test]
+fn e2e_golden_output_exact() {
+    let temp_dir = TempDir::new().expect("temp dir");
+
+    let source = r#"/** @toon
+purpose: Auth module
+
+invariants:
+    - Tokens expire in 15min
+*/
+
+export interface User { id: string }
+
+/** @toon invariant: caller must be authed */
+export function getUser(): User { return { id: "1" }; }
+"#;
+
+    std::fs::write(temp_dir.path().join("auth.ts"), source).expect("write");
+
+    bin()
+        .args(["--root", temp_dir.path().to_string_lossy().as_ref(), "generate"])
+        .status()
+        .expect("run");
+
+    let output = std::fs::read_to_string(temp_dir.path().join(".ai/auth.ts.toon")).expect("read");
+
+    // Verify exact expected content
+    assert!(output.starts_with("purpose: Auth module\n"), "Got:\n{}", output);
+    assert!(output.contains("exports[2]: User(interface), getUser(fn)"), "Got:\n{}", output);
+    assert!(output.contains("invariants: Tokens expire in 15min"), "Got:\n{}", output);
+    assert!(output.contains("fn:getUser: invariants: caller must be authed"), "Got:\n{}", output);
+}
+
 #[test]
 fn e2e_generate_creates_toon_files() {
     let temp_dir = TempDir::new().expect("temp dir");
