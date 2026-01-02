@@ -1,4 +1,4 @@
-purpose: purpose: Sample C# fixture for testing the luny C# parser.
+purpose: Sample C# fixture for testing the luny C# parser.
 tokens: ~1600
 exports[16]: UserStatus(enum), IRepository(interface), UserConfig(record), UserService(class), GetByIdAsync(method), SaveAsync(method), GetAllAsync(method), DeleteAsync(method), StringExtensions(class), ToCamelCase(method), ToPascalCase(method), Truncate(method), BaseEntity(class), Set(method), Get(method), Constants(class)
 when-editing: !Keep all visibility modifiers represented for comprehensive testing; Maintain the mix of sync and async methods

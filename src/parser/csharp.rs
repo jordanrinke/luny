@@ -232,7 +232,13 @@ impl CSharpParser {
                 current_section = Some(header);
                 current_items.clear();
             } else if current_section.is_none() && block.purpose.is_none() {
-                block.purpose = Some(trimmed.to_string());
+                // Strip "purpose:" prefix if present
+                let purpose_text = if trimmed.to_lowercase().starts_with("purpose:") {
+                    trimmed[8..].trim()
+                } else {
+                    trimmed
+                };
+                block.purpose = Some(purpose_text.to_string());
             } else if trimmed.starts_with('-') || trimmed.starts_with('•') {
                 let item = trimmed.trim_start_matches('-').trim_start_matches('•').trim();
                 if !item.is_empty() {

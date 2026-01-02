@@ -221,23 +221,31 @@ Luny generates `.toon` files in the `.ai/` directory:
 src/auth/provider.ts  →  .ai/src/auth/provider.ts.toon
 ```
 
-Example output:
+Example output (from the TypeScript example above):
 
 ```toon
-purpose: auth context managing session state, token refresh, and platform storage
-tokens: ~2800
-exports[3]: AuthProvider(component), useAuth(hook), AuthContext(const)
-signatures[3]:
-  AuthProvider(component): (props: {config,children}) => JSX.Element
-  useAuth(hook): () => AuthContextValue
-  AuthContext(const): React.Context<AuthContextValue>
-when-editing: !validate token expiry before permissions; update User type for new claims
-invariants: 15min access tokens; single refresh in flight; web=cookies mobile=SecureStore
-do-not: never localStorage tokens (XSS); never skip loading check
-imports[4]{from,items}: react,createContext|useContext; ./api-client,ApiClient
-calls[3]{target,methods}: ./api-client,refresh|me|logout
-gotchas: isWeb typeof window breaks SSR; don't destructure useAuth at module level
+purpose: Auth context managing session state, token refresh, and platform storage.
+tokens: ~652
+exports[6]: User(interface), AuthContextValue(interface), AuthContext(context), refreshToken(fn), useAuth(hook), AuthProvider(fn)
+signatures[5]:
+  User(interface): { id: string; email: string; roles: string[] }
+  AuthContextValue(interface): { user: User | null; isAuthenticated: boolean; ... }
+  refreshToken(fn): () : Promise<void>
+  useAuth(hook): () : AuthContextValue | null
+  AuthProvider(fn): ({ children }: { children: React.ReactNode })
+when-editing: !Always validate token expiry before checking permissions; Update User type if adding new claims
+invariants: Access tokens expire in 15 minutes; Only one refresh request in flight; Web uses HTTP-only cookies; mobile uses SecureStore
+do-not: Never store tokens in localStorage (XSS vulnerability); Never skip loading state check before accessing user
+imports[3]{from,items}: react,createContext|useContext|useState|useEffect; ./api-client,ApiClient; ./secure-store,SecureStore
+calls[1]{target,methods}: react,createContext|useContext|useState|useEffect
+error-handling: 401: Attempt refresh first, then onUnauthorized if fails; Network timeout: Retry once, then surface error
+flows: login: oauth → callback → persistSession → authenticated; refresh: timer fires → check expiry → API call → update tokens
+fn:refreshToken: invariants: caller must check isAuthenticated before calling
+fn:useAuth: gotchas: returns null during SSR, not undefined
+gotchas: isWeb check uses typeof window - breaks in SSR; Don't destructure useAuth() at module level
 ```
+
+Note the `fn:` prefixed lines show per-function annotations from inline `@toon` comments.
 
 ## Commands
 

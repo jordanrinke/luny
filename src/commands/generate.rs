@@ -400,6 +400,13 @@ fn process_file(
         toon_data.related = block.related.clone();
     }
 
+    // Add function-level annotations (inline @toon comments)
+    if !comments.function_annotations.is_empty() {
+        toon_data.function_annotations = Some(
+            comments.function_annotations.values().cloned().collect()
+        );
+    }
+
     // Format TOON content
     let content = format_toon(&toon_data);
 

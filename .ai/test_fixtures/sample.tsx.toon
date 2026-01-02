@@ -1,4 +1,4 @@
-purpose: purpose: Sample TSX fixture for testing React component and hook extraction.
+purpose: Sample TSX fixture for testing React component and hook extraction.
 tokens: ~715
 exports[7]: ButtonVariant(type), ButtonProps(interface), useUser(hook), useToggle(hook), Button(component), UserCard(component), List(component)
 signatures[7]:
@@ -12,6 +12,6 @@ signatures[7]:
 when-editing: !Maintain hook usage patterns for hook detection testing; Keep both function and arrow component styles
 invariants: Components must use proper React patterns; Hooks must follow rules of hooks
 imports[3]{from,items}: react,React|useState|useEffect|useCallback|useMemo; ./sample,UserConfig|UserService; react,ReactNode|FC
-calls[1]{target,methods}: react,useEffect|useMemo|useState|useCallback
+calls[1]{target,methods}: react,useMemo|useEffect|useCallback|useState
 imported-by[1]: test_fixtures/sample.tsx
 gotchas: TSX requires special handling for generic arrow functions; Hook detection relies on use* naming convention

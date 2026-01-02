@@ -28,5 +28,5 @@ when-editing: - !Keep both exported (uppercase) and unexported (lowercase) items
 invariants: - Exported items must start with uppercase letters - Unexported items must start with lowercase letters - Include exa...
 do-not: - Remove any exports without updating corresponding tests - Use cgo in this fixture
 imports[7]{from,items}: encoding/json,json; fmt,fmt; io/ioutil,ioutil; os,os; path/filepath,filepath; sync,sync; time,time
-calls[6]{target,methods}: path/filepath,Join|Ext; io/ioutil,ReadDir|ReadFile|WriteFile; os,IsNotExist|Remove|MkdirAll; fmt,Sprintf|Errorf|Printf; encoding/json,Unmarshal|MarshalIndent; time,Now
+calls[6]{target,methods}: path/filepath,Ext|Join; encoding/json,MarshalIndent|Unmarshal; fmt,Errorf|Printf|Sprintf; time,Now; os,IsNotExist|Remove|MkdirAll; io/ioutil,ReadFile|ReadDir|WriteFile
 gotchas: - Go determines visibility by the first letter case - Methods with pointer receivers are common patterns - Interface ...

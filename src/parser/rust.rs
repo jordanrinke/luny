@@ -729,7 +729,13 @@ impl RustParser {
             } else if current_section.is_some() {
                 current_items.push(trimmed.to_string());
             } else if i == 0 {
-                block.purpose = Some(trimmed.to_string());
+                // Strip "purpose:" prefix if present
+                let purpose_text = if trimmed.to_lowercase().starts_with("purpose:") {
+                    trimmed[8..].trim()
+                } else {
+                    trimmed
+                };
+                block.purpose = Some(purpose_text.to_string());
             }
         }
 

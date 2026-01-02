@@ -1,8 +1,8 @@
 purpose: This module parses Ruby source files to extract classes, modules, methods, and require/include statements. It uses tree-sitter for robust parsing and follows Ruby conventions for determining which items are public exports.
-tokens: ~5169
+tokens: ~5233
 exports[3]: RubyParser(struct), new(method(RubyParser)), new(fn)
 signatures[2]:
   RubyParser(struct): { }
   new(fn): () Self
 imports[6]{from,items}: crate::parser,LanguageParser|ParseError; crate::types,ASTInfo|ExportInfo|ExtractedComments|ImportInfo|ToonCommentBlock|WhenEditingItem; regex,Regex; std::path,Path; tree_sitter,Parser; super::*,super::*
-calls[5]{target,methods}: crate::types,default; crate::parser,ParseError; regex,new|new(r"=begin[\s\S]*?@toon[\s\S]*?=end").unwrap|new(r"#\s*@toon[^\n]*\n(?:#[^\n]*\n)*").unwrap|new(r"#\s*@toon\s*\n((?:#[^\n]*\n)*)").unwrap; std::path,new; tree_sitter,new
+calls[5]{target,methods}: crate::types,default; std::path,new; tree_sitter,new; regex,new(r"=begin[\s\S]*?@toon[\s\S]*?=end").unwrap|new|new(r"#\s*@toon[^\n]*\n(?:#[^\n]*\n)*").unwrap|new(r"#\s*@toon\s*\n((?:#[^\n]*\n)*)").unwrap; crate::parser,ParseError

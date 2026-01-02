@@ -1,4 +1,4 @@
 purpose: the CLI entry point for luny. It parses command-line arguments using clap, determines the project root directory, and dispatches to the appropriate command handler (generate, validate, or strip).
 tokens: ~430
 imports[5]{from,items}: clap,Parser; luny::cli,Cli|Commands; luny::commands,run_generate|run_strip|run_validate; anyhow,Context; std,env
-calls[2]{target,methods}: std,current_dir().context|current_dir; luny::cli,parse
+calls[2]{target,methods}: luny::cli,parse; std,current_dir().context|current_dir

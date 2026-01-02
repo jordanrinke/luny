@@ -34,7 +34,7 @@
 
 use crate::parser::{LanguageParser, ParseError};
 use crate::types::{
-    ASTInfo, CallInfo, ExportInfo, ExtractedComments, ImportInfo,
+    ASTInfo, CallInfo, ExportInfo, ExtractedComments, FunctionAnnotation, ImportInfo,
     SignatureInfo, ToonCommentBlock, WhenEditingItem,
 };
 use std::collections::{HashMap, HashSet};
@@ -953,8 +953,13 @@ impl TypeScriptParser {
                 current_section = Some(header);
                 current_items.clear();
             } else if current_section.is_none() && block.purpose.is_none() {
-                // First non-empty line is purpose
-                block.purpose = Some(trimmed.to_string());
+                // First non-empty line is purpose - strip "purpose:" prefix if present
+                let purpose_text = if trimmed.to_lowercase().starts_with("purpose:") {
+                    trimmed[8..].trim()
+                } else {
+                    trimmed
+                };
+                block.purpose = Some(purpose_text.to_string());
             } else if trimmed.starts_with('-') || trimmed.starts_with('•') {
                 // List item
                 let item = trimmed.trim_start_matches('-').trim_start_matches('•').trim();
@@ -1060,6 +1065,88 @@ impl TypeScriptParser {
             _ => {}
         }
     }
+
+    /// Find the name of the next function/export declaration after a given byte position
+    fn find_next_function_name(&self, root: &Node, source: &str, after_pos: usize) -> Option<String> {
+        let mut cursor = root.walk();
+        self.find_next_function_recursive(&mut cursor, source, after_pos)
+    }
+
+    fn find_next_function_recursive(
+        &self,
+        cursor: &mut tree_sitter::TreeCursor,
+        source: &str,
+        after_pos: usize,
+    ) -> Option<String> {
+        loop {
+            let node = cursor.node();
+
+            // Check if this node starts after our position and is a function/export
+            if node.start_byte() >= after_pos {
+                let kind = node.kind();
+                if kind == "function_declaration"
+                    || kind == "export_statement"
+                    || kind == "lexical_declaration"
+                {
+                    // Extract the function/variable name
+                    return self.extract_declaration_name(&node, source);
+                }
+            }
+
+            // Recurse into children
+            if cursor.goto_first_child() {
+                if let Some(name) = self.find_next_function_recursive(cursor, source, after_pos) {
+                    return Some(name);
+                }
+                cursor.goto_parent();
+            }
+
+            if !cursor.goto_next_sibling() {
+                return None;
+            }
+        }
+    }
+
+    fn extract_declaration_name(&self, node: &Node, source: &str) -> Option<String> {
+        let kind = node.kind();
+
+        if kind == "function_declaration" {
+            // Look for the identifier child
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    if child.kind() == "identifier" {
+                        return Some(self.node_text(child, source));
+                    }
+                }
+            }
+        } else if kind == "export_statement" {
+            // Look for function_declaration or variable_declaration inside
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    if let Some(name) = self.extract_declaration_name(&child, source) {
+                        return Some(name);
+                    }
+                }
+            }
+        } else if kind == "lexical_declaration" {
+            // Look for variable_declarator -> identifier
+            for i in 0..node.child_count() {
+                if let Some(child) = node.child(i) {
+                    if child.kind() == "variable_declarator" {
+                        for j in 0..child.child_count() {
+                            if let Some(grandchild) = child.child(j) {
+                                if grandchild.kind() == "identifier" {
+                                    return Some(self.node_text(grandchild, source));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
 }
 
 impl Default for TypeScriptParser {
@@ -1105,32 +1192,117 @@ impl LanguageParser for TypeScriptParser {
     fn extract_toon_comments(&self, source: &str) -> Result<ExtractedComments, ParseError> {
         let mut result = ExtractedComments::default();
 
-        // Find @toon block comments using regex
+        // Find @toon block comments using regex (file-level, multi-line)
         let block_pattern = Regex::new(r"/\*\*[\s\S]*?@toon[\s\S]*?\*/").unwrap();
 
         if let Some(mat) = block_pattern.find(source) {
             let comment = mat.as_str();
-            // Extract content between /** and */
-            let content = comment
-                .trim_start_matches("/**")
-                .trim_end_matches("*/")
-                .trim();
+            // Check if this is a file-level block (contains sections like when-editing, invariants, etc.)
+            // vs a single-line inline comment
+            let is_file_block = comment.contains("when-editing")
+                || comment.contains("invariants")
+                || comment.contains("do-not")
+                || comment.contains("gotchas")
+                || comment.contains("flows")
+                || comment.lines().count() > 3;
 
-            // Remove @toon marker
-            let content = content
-                .lines()
-                .map(|line| {
-                    let trimmed = line.trim().trim_start_matches('*').trim();
-                    if trimmed == "@toon" {
-                        ""
-                    } else {
-                        trimmed
+            if is_file_block {
+                // Extract content between /** and */
+                let content = comment
+                    .trim_start_matches("/**")
+                    .trim_end_matches("*/")
+                    .trim();
+
+                // Remove @toon marker
+                let content = content
+                    .lines()
+                    .map(|line| {
+                        let trimmed = line.trim().trim_start_matches('*').trim();
+                        if trimmed == "@toon" {
+                            ""
+                        } else {
+                            trimmed
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                result.file_block = Some(self.parse_toon_block(&content));
+            }
+        }
+
+        // Find inline @toon comments (single-line annotations for specific functions)
+        // Pattern matches: /** @toon field: value */ or // @toon field: value
+        let inline_pattern = Regex::new(
+            r"(?:/\*\*\s*@toon\s+(invariant|gotcha|do-not|constraint|error-handling):\s*([^*]+)\s*\*/|//\s*@toon\s+(invariant|gotcha|do-not|constraint|error-handling):\s*(.+))"
+        ).unwrap();
+
+        // Collect all inline annotations with their positions
+        let mut inline_annotations: Vec<(usize, String, String)> = Vec::new();
+        for cap in inline_pattern.captures_iter(source) {
+            let pos = cap.get(0).unwrap().end();
+            let (field, value) = if let Some(f) = cap.get(1) {
+                (f.as_str().to_string(), cap.get(2).unwrap().as_str().trim().to_string())
+            } else {
+                (cap.get(3).unwrap().as_str().to_string(), cap.get(4).unwrap().as_str().trim().to_string())
+            };
+            inline_annotations.push((pos, field, value));
+        }
+
+        if !inline_annotations.is_empty() {
+            // Parse source with tree-sitter to find function names
+            let mut parser = Parser::new();
+            let language = tree_sitter_typescript::LANGUAGE_TYPESCRIPT;
+            parser.set_language(&language.into()).ok();
+
+            if let Some(tree) = parser.parse(source, None) {
+                let root = tree.root_node();
+
+                for (pos, field, value) in inline_annotations {
+                    // Find the next function/export after this position
+                    if let Some(func_name) = self.find_next_function_name(&root, source, pos) {
+                        let annotation = result
+                            .function_annotations
+                            .entry(func_name.clone())
+                            .or_insert_with(|| FunctionAnnotation {
+                                name: func_name,
+                                invariants: None,
+                                gotchas: None,
+                                do_not: None,
+                                error_handling: None,
+                                constraints: None,
+                            });
+
+                        match field.as_str() {
+                            "invariant" => {
+                                annotation
+                                    .invariants
+                                    .get_or_insert_with(Vec::new)
+                                    .push(value);
+                            }
+                            "gotcha" => {
+                                annotation.gotchas.get_or_insert_with(Vec::new).push(value);
+                            }
+                            "do-not" => {
+                                annotation.do_not.get_or_insert_with(Vec::new).push(value);
+                            }
+                            "constraint" => {
+                                annotation
+                                    .constraints
+                                    .get_or_insert_with(Vec::new)
+                                    .push(value);
+                            }
+                            "error-handling" => {
+                                annotation
+                                    .error_handling
+                                    .get_or_insert_with(Vec::new)
+                                    .push(value);
+                            }
+                            _ => {}
+                        }
                     }
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-
-            result.file_block = Some(self.parse_toon_block(&content));
+                }
+            }
         }
 
         Ok(result)

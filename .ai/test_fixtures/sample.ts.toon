@@ -1,4 +1,4 @@
-purpose: purpose: Sample TypeScript fixture for testing the luny parser.
+purpose: Sample TypeScript fixture for testing the luny parser.
 tokens: ~560
 exports[10]: UserId(type), Result(type), UserConfig(interface), Status(enum), UserService(class), validateUser(fn), saveUser(fn), createUser(fn), DEFAULT_CONFIG(const), defaultExport(const)
 signatures[7]:
