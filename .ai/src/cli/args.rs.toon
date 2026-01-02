@@ -1,0 +1,10 @@
+purpose: This module defines the command-line interface for luny using the clap derive macros. It specifies all commands (generate, validate, strip) and their arguments.
+tokens: ~3277
+exports[5]: Cli(struct), Commands(enum), GenerateArgs(struct), ValidateArgs(struct), StripArgs(struct)
+signatures[5]:
+  Cli(struct): { root: Option<PathBuf>, verbose: bool, command: Commands }
+  Commands(enum): { Generate | Validate | Strip }
+  GenerateArgs(struct): { paths: Vec<PathBuf>, dry_run: bool, force: bool, unsafe_follow: bool, token_warn: usize, ... }
+  ValidateArgs(struct): { paths: Vec<PathBuf>, fix: bool, strict: bool, unsafe_follow: bool, token_warn: usize, ... }
+  StripArgs(struct): { input: Option<PathBuf>, output: Option<PathBuf>, ext: Option<String> }
+imports[4]{from,items}: clap,Args|Parser|Subcommand; std::path,PathBuf; super::*,super::*; clap,CommandFactory

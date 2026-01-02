@@ -1,0 +1,13 @@
+purpose: purpose: Sample JavaScript fixture for testing both CommonJS and ES module patterns.
+tokens: ~595
+exports[8]: Logger(class), formatDate(fn), fetchData(fn), debounce(fn), VERSION(const), DEFAULT_PORT(const), config(const), startServer(fn)
+signatures[4]:
+  formatDate(fn): (date)
+  fetchData(fn): (url)
+  debounce(fn): (fn, delay) => ...
+  startServer(fn): (port = DEFAULT_PORT)
+when-editing: !Keep both CommonJS and ES module patterns represented; Maintain JSDoc comments for type inference testing
+invariants: Functions should have clear parameter and return patterns; Both named and default exports must be present
+imports[2]{from,items}: http,createServer; events,EventEmitter
+calls[1]{target,methods}: http,createServer
+imported-by[1]: test_fixtures/sample.tsx

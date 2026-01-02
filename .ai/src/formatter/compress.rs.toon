@@ -1,0 +1,8 @@
+purpose: This module provides text compression utilities that reduce verbose prose to compact, token-efficient text for TOON files. It applies pattern-based substitutions to remove filler words and redundant phrases.
+tokens: ~1981
+exports[3]: MAX_ITEM_LENGTH(const), compress(fn), compress_item(fn)
+signatures[2]:
+  compress(fn): (text: &str) String
+  compress_item(fn): (text: &str) String
+imports[3]{from,items}: once_cell::sync,Lazy; regex,Regex; super::*,super::*
+calls[1]{target,methods}: once_cell::sync,new

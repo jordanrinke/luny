@@ -1,0 +1,22 @@
+purpose: This module defines all core data types used throughout luny, including export information, import tracking, call relationships, and the main ToonData structure that represents the complete DOSE for a source file.
+tokens: ~2298
+exports[22]: ExportInfo(struct), ImportInfo(struct), CallInfo(struct), CalledByInfo(struct), SignatureInfo(struct), WhenEditingItem(struct), FunctionAnnotation(struct), ASTInfo(struct), ExtractedComments(struct), ToonCommentBlock(struct), ToonData(struct), new(method(ToonData)), new(fn), ValidationResult(struct), new(method(ValidationResult)), is_valid(method(ValidationResult)), add_error(method(ValidationResult)), add_warning(method(ValidationResult)), new(fn), is_valid(fn), add_error(fn), add_warning(fn)
+signatures[17]:
+  ExportInfo(struct): { name: String, kind: String }
+  ImportInfo(struct): { from: String, items: Vec<String> }
+  CallInfo(struct): { target: String, method: String }
+  CalledByInfo(struct): { from: String, function: String }
+  SignatureInfo(struct): { name: String, kind: String, signature: String }
+  WhenEditingItem(struct): { text: String, important: bool }
+  FunctionAnnotation(struct): { name: String, invariants: Option<Vec<String>>, gotchas: Option<Vec<String>>, do_not: Option<Vec<String>>, error_handling: Option<Vec<String>>, ... }
+  ASTInfo(struct): { tokens: usize, exports: Vec<ExportInfo>, imports: Vec<ImportInfo>, calls: Vec<CallInfo>, signatures: Vec<SignatureInfo>, ... }
+  ExtractedComments(struct): { file_block: Option<ToonCommentBlock>, function_annotations: HashMap<String, FunctionAnnotation> }
+  ToonCommentBlock(struct): { purpose: Option<String>, when_editing: Option<Vec<WhenEditingItem>>, do_not: Option<Vec<String>>, invariants: Option<Vec<String>>, error_handling...
+  ToonData(struct): { purpose: String, tokens: usize, exports: Vec<ExportInfo>, when_editing: Option<Vec<WhenEditingItem>>, do_not: Option<Vec<String>>, ... }
+  new(fn): (purpose: String, tokens: usize, exports: Vec<ExportInfo>) Self
+  ValidationResult(struct): { source_path: String, toon_path: String, errors: Vec<String>, warnings: Vec<String> }
+  new(fn): (source_path: String, toon_path: String) Self
+  is_valid(fn): (&self) bool
+  add_error(fn): (&mut self, msg: impl Into<String>)
+  add_warning(fn): (&mut self, msg: impl Into<String>)
+imports[2]{from,items}: serde,Deserialize|Serialize; std::collections,HashMap

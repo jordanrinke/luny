@@ -1,0 +1,8 @@
+purpose: purpose: Sample Ruby fixture for testing the luny Ruby parser.
+tokens: ~924
+exports[26]: Loggable(module), log(method), log_error(method), StringUtils(module), camelize(method), underscore(method), truncate(method), UserConfig(class), initialize(method), to_h(method), to_json(method), self.from_json(class_method), BaseService(class), initialize(method), get(method), save(method), cache_get(method), cache_set(method), UserService(class), get(method), save(method), all_users(method), validate!(method), UserFactory(module), self.create(class_method), self.create_admin(class_method)
+when-editing: !Keep all export types represented for comprehensive testing; Maintain the mix of class and module patterns
+invariants: All public items must have clear, testable names; Include both instance and class methods
+do-not: Remove any exports without updating corresponding tests
+imports[3]{from,items}: json,json; fileutils,fileutils; helper,helper
+gotchas: Ruby private methods are declared after the `private` keyword; Module methods require explicit `module_function` or `self.` prefix

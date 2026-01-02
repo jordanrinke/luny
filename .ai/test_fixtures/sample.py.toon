@@ -1,0 +1,8 @@
+purpose: purpose: Sample Python fixture for testing the luny Python parser.
+tokens: ~1117
+exports[8]: log_calls(fn), UserConfig(class), BaseService(class), UserService(class), validate_email(fn), fetch_user_async(fn), create_user(fn), Cache(class)
+when-editing: !Keep all export types represented for comprehensive testing; Maintain the mix of sync and async functions; Preserve decorator patterns
+invariants: All public items must have clear, testable names; Import statements should cover all supported patterns; Private functions (underscore prefix) should not be exported
+do-not: Remove any exports without updating corresponding tests; Use relative imports in this fixture
+imports[8]{from,items}: typing,; dataclasses,; abc,; functools,; asyncio,asyncio; json,json; os,os; uuid,uuid
+gotchas: Python uses underscore convention for private items; Decorators affect function signatures

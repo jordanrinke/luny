@@ -1,0 +1,17 @@
+purpose: purpose: Sample TypeScript fixture for testing the luny parser.
+tokens: ~560
+exports[10]: UserId(type), Result(type), UserConfig(interface), Status(enum), UserService(class), validateUser(fn), saveUser(fn), createUser(fn), DEFAULT_CONFIG(const), defaultExport(const)
+signatures[7]:
+  UserId(type): string
+  Result(type): <T, E = Error> = { ok: true; value: T } | { ok: false; error: E }
+  UserConfig(interface): { id: UserId; name: string; settings: Record<string, unknown> }
+  validateUser(fn): (user: UserConfig) : boolean
+  saveUser(fn): (user: UserConfig) : Promise<void>
+  createUser(fn): (name: string) : UserConfig => ...
+  DEFAULT_CONFIG(const): UserConfig
+when-editing: !Keep all export types represented for comprehensive testing; Maintain the mix of sync and async functions
+invariants: All exported items must have clear, testable names; Import statements should cover all supported patterns
+do-not: Remove any exports without updating corresponding tests
+imports[4]{from,items}: fs/promises,readFile|writeFile; path,; ./other-module,defaultExport; ./types,SomeType
+calls[1]{target,methods}: fs/promises,readFile|writeFile
+imported-by[1]: test_fixtures/sample.tsx

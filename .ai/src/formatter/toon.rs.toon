@@ -1,0 +1,8 @@
+purpose: This module handles serialization and deserialization of TOON DOSE files. It formats ToonData into the compact TOON text format and parses TOON content back into ToonData for validation and processing.
+tokens: ~7830
+exports[2]: format_toon(fn), parse_toon(fn)
+signatures[2]:
+  format_toon(fn): (data: &ToonData) String
+  parse_toon(fn): (content: &str) ToonData
+imports[4]{from,items}: crate::formatter::compress,compress|compress_item; crate::types,CalledByInfo|CallInfo|ExportInfo|FunctionAnnotation|ImportInfo|SignatureInfo|ToonData|WhenEditingItem; std::collections,HashMap; super::*,super::*
+calls[2]{target,methods}: crate::types,new; std::collections,new

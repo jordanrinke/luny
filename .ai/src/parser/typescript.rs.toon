@@ -1,0 +1,8 @@
+purpose: This module parses TypeScript and JavaScript source files to extract AST information including exports, imports, function calls, and type signatures. It uses tree-sitter for robust parsing and handles both ES modules and CommonJS.
+tokens: ~13377
+exports[3]: TypeScriptParser(struct), new(method(TypeScriptParser)), new(fn)
+signatures[2]:
+  TypeScriptParser(struct): { }
+  new(fn): () Self
+imports[7]{from,items}: crate::parser,LanguageParser|ParseError; crate::types,ASTInfo|CallInfo|ExportInfo|ExtractedComments|ImportInfo|SignatureInfo|ToonCommentBlock|WhenEditingItem; std::collections,HashMap|HashSet; regex,Regex; std::path,Path; tree_sitter,Node|Parser; super::*,super::*
+calls[6]{target,methods}: regex,new(r"/\*\*[\s\S]*?@toon[\s\S]*?\*/").unwrap|new(r"//\s*@toon:[^\n]*\n?").unwrap|new; tree_sitter,new; std::collections,new; crate::types,default; crate::parser,ParseError; std::path,new

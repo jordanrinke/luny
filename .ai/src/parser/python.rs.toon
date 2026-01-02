@@ -1,0 +1,8 @@
+purpose: This module parses Python source files to extract top-level functions, classes, and import statements. It uses tree-sitter for robust parsing and follows Python conventions for determining which items are public exports.
+tokens: ~5989
+exports[3]: PythonParser(struct), new(method(PythonParser)), new(fn)
+signatures[2]:
+  PythonParser(struct): { }
+  new(fn): () Self
+imports[6]{from,items}: crate::parser,LanguageParser|ParseError; crate::types,ASTInfo|ExportInfo|ExtractedComments|ImportInfo|ToonCommentBlock|WhenEditingItem; regex,Regex; std::path,Path; tree_sitter,Parser; super::*,super::*
+calls[5]{target,methods}: regex,new(r#""""[\s\S]*?@toon[\s\S]*?""""#).unwrap|new(r"#\s*@toon[^\n]*\n(?:#[^\n]*\n)*").unwrap|new|new(r"#\s*@toon\s*\n((?:#[^\n]*\n)*)").unwrap; tree_sitter,new; crate::parser,ParseError; std::path,new; crate::types,default

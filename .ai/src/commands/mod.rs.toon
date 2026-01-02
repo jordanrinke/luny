@@ -1,0 +1,3 @@
+purpose: mod module
+tokens: ~25
+imports[3]{from,items}: generate::*,generate::*; validate::*,validate::*; strip::*,strip::*

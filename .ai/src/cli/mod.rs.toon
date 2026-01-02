@@ -1,0 +1,3 @@
+purpose: mod module
+tokens: ~7
+imports[1]{from,items}: args::*,args::*
