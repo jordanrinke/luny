@@ -1,0 +1,349 @@
+# Luny
+
+A multi-language CLI tool that generates AI-optimized `.toon` DOSE (Distilled, Optimized, Semantic Extract) files for codebases using [Token-Oriented Object Notation](https://toonformat.dev/).
+
+## What Problem Does This Solve?
+
+| Problem | Solution |
+|---------|----------|
+| AI must read entire files to understand them | DOSE provides semantic briefing |
+| Tribal knowledge lives only in people's heads | DOSE captures invariants, gotchas, flows |
+| AI makes reasoning errors without context | Semantic anchoring prevents common mistakes |
+| Large files exceed context limits | DOSE is small (~200-400 tokens) |
+
+## Research Foundation
+
+Luny's approach is grounded in peer-reviewed research on LLM context handling:
+
+- **[Lost in the Middle](https://arxiv.org/abs/2307.03172)** (Liu et al., 2023): Models perform best when relevant info is at the **beginning or end** of context (U-shaped curve). TOON uses "U-curve ordering" to place critical info first.
+
+- **[Focused Chain-of-Thought](https://arxiv.org/abs/2511.22176)** (Struppek et al., 2025): Structured input formatting reduces generated tokens **2-3x** while maintaining accuracy. TOON's structured format aligns with F-CoT principles.
+
+- **[UID Hypothesis](https://arxiv.org/abs/2510.06953)** (Gwak et al., 2025): Uniform information density correlates with **10-32% accuracy gains** in reasoning. TOON's consistent structure promotes uniform density.
+
+- **[RULER](https://arxiv.org/abs/2404.06654)** (Hsieh et al., 2024): Models claiming 32K+ context often fail at actual 32K usage. TOON keeps context small and focused.
+
+
+## Installation
+
+### From crates.io
+
+```bash
+cargo install luny
+```
+
+### From source
+
+```bash
+git clone https://github.com/jordanrinke/luny
+cd luny
+make install
+```
+
+## Quick Start
+
+```bash
+# Generate .toon files for your project
+luny generate src/
+
+# Validate .toon files against source
+luny validate
+
+# Strip @toon comments when reading into LLM (saves tokens)
+luny strip src/main.ts
+```
+
+## What Luny Generates vs What You Write
+
+TOON DOSE files have two categories of fields:
+
+### Structural Fields (Luny generates these)
+
+Extracted automatically from AST analysis:
+
+| Field | Description |
+|-------|-------------|
+| `tokens` | Approximate token count |
+| `exports` | Public API (functions, classes, types) |
+| `imports` | Dependencies |
+| `calls` | Functions this file calls |
+| `imported-by` | Files that import this one |
+| `called-by` | Functions that call into this file |
+| `signatures` | Type signatures for exports |
+
+### Semantic Fields (You write these in @toon comments)
+
+Human knowledge that can't be extracted from code:
+
+| Field | Description | |
+|-------|-------------|---|
+| `purpose` | What this file does | Required |
+| `when-editing` | Critical things to check when modifying | Recommended |
+| `invariants` | Rules that must ALWAYS hold | Recommended |
+| `do-not` | Forbidden patterns (security, bugs) | Recommended |
+| `gotchas` | Non-obvious traps | Recommended |
+| `error-handling` | How to handle each error type | Optional |
+| `constraints` | Prerequisites and requirements | Optional |
+| `flows` | Multi-step operation sequences | Optional |
+| `testing` | How to test this code | Optional |
+| `common-mistakes` | Historical bugs to avoid | Optional |
+| `change-impacts` | Non-obvious blast radius | Optional |
+
+## Writing @toon Comments
+
+Add `@toon` blocks to your source files. Luny extracts the semantic content and combines it with AST data.
+
+### TypeScript/JavaScript
+
+```typescript
+/** @toon
+purpose: Auth context managing session state, token refresh, and platform storage.
+
+when-editing:
+    - !Always validate token expiry before checking permissions
+    - Update User type if adding new claims
+
+invariants:
+    - Access tokens expire in 15 minutes
+    - Only one refresh request in flight at a time
+    - Web uses HTTP-only cookies; mobile uses SecureStore
+
+do-not:
+    - Never store tokens in localStorage (XSS vulnerability)
+    - Never skip loading state check before accessing user
+
+gotchas:
+    - isWeb check uses typeof window - breaks in SSR
+    - Don't destructure useAuth() at module level
+
+error-handling:
+    - 401: Attempt refresh first, then onUnauthorized if fails
+    - Network timeout: Retry once, then surface error
+
+flows:
+    - login: oauth → callback → persistSession → authenticated
+    - refresh: timer fires → check expiry → API call → update tokens
+*/
+export function AuthProvider({ children }: Props) {
+  // ...
+}
+
+/** @toon invariant: caller must check isAuthenticated before calling */
+export async function refreshToken(): Promise<void> {
+  // ...
+}
+
+/** @toon gotcha: returns null during SSR, not undefined */
+export function useAuth(): AuthContextValue | null {
+  // ...
+}
+```
+
+### Python
+
+```python
+"""@toon
+purpose: Database connection pool with automatic reconnection and health checks.
+
+when-editing:
+    - !Connection limits are per-environment in config
+    - Always use context managers for connections
+
+invariants:
+    - Pool size never exceeds MAX_CONNECTIONS
+    - Unhealthy connections removed within 30 seconds
+
+do-not:
+    - Never create connections outside the pool
+    - Never hold connections across async boundaries
+
+gotchas:
+    - close() is async - must be awaited
+    - Health checks run on background thread
+"""
+
+class ConnectionPool:
+    # ...
+
+    # @toon invariant: always returns a valid connection or raises
+    async def acquire(self) -> Connection:
+        # ...
+
+    # @toon gotcha: must be called even if acquire() raised
+    async def release(self, conn: Connection) -> None:
+        # ...
+```
+
+### Rust
+
+```rust
+//! @toon
+//! purpose: Thread-safe LRU cache with TTL support.
+//!
+//! when-editing:
+//!     - !Lock ordering: always acquire read before write
+//!     - Eviction runs on background thread
+//!
+//! invariants:
+//!     - Cache size never exceeds configured maximum
+//!     - Expired entries are never returned
+//!
+//! do-not:
+//!     - Never hold lock across await points
+//!     - Never bypass TTL checks
+//!
+//! gotchas:
+//!     - get() clones values - expensive for large types
+//!     - clear() blocks until eviction completes
+
+pub struct Cache<K, V> {
+    // ...
+}
+
+impl<K, V> Cache<K, V> {
+    /// @toon invariant: returns None for expired entries, never stale data
+    pub fn get(&self, key: &K) -> Option<V> {
+        // ...
+    }
+
+    /// @toon gotcha: overwrites existing entry without returning old value
+    pub fn insert(&mut self, key: K, value: V, ttl: Duration) {
+        // ...
+    }
+}
+```
+
+## Generated TOON Format
+
+Luny generates `.toon` files in the `.ai/` directory:
+
+```
+src/auth/provider.ts  →  .ai/src/auth/provider.ts.toon
+```
+
+Example output:
+
+```toon
+purpose: auth context managing session state, token refresh, and platform storage
+tokens: ~2800
+exports[3]: AuthProvider(component), useAuth(hook), AuthContext(const)
+signatures[3]:
+  AuthProvider(component): (props: {config,children}) => JSX.Element
+  useAuth(hook): () => AuthContextValue
+  AuthContext(const): React.Context<AuthContextValue>
+when-editing: !validate token expiry before permissions; update User type for new claims
+invariants: 15min access tokens; single refresh in flight; web=cookies mobile=SecureStore
+do-not: never localStorage tokens (XSS); never skip loading check
+imports[4]{from,items}: react,createContext|useContext; ./api-client,ApiClient
+calls[3]{target,methods}: ./api-client,refresh|me|logout
+gotchas: isWeb typeof window breaks SSR; don't destructure useAuth at module level
+```
+
+## Commands
+
+### `luny generate`
+
+```bash
+luny generate [PATH...]           # Generate for specific paths
+luny generate                     # Generate for current directory
+luny generate --dry-run           # Preview without writing
+luny generate --force             # Regenerate existing files
+luny generate --token-warn 500    # Warning threshold (default: 500)
+luny generate --token-error 1000  # Error threshold (default: 1000)
+```
+
+### `luny validate`
+
+```bash
+luny validate [PATH...]    # Validate specific files
+luny validate              # Validate all .toon files
+luny validate --fix        # Regenerate invalid files
+luny validate --strict     # Treat warnings as errors
+```
+
+### `luny strip`
+
+Remove `@toon` comments when feeding source to an LLM. Since the LLM already has semantic context from the `.toon` file, the embedded comments are redundant—stripping them saves tokens.
+
+```bash
+luny strip <FILE>              # Output to stdout
+luny strip <FILE> -o out.ts    # Output to file
+luny strip - --ext ts          # Read from stdin
+```
+
+**LLM Integration**: Configure your AI tool to pipe files through `luny strip` when reading source files that have corresponding `.toon` DOSE files. This avoids duplicate context and reduces token usage.
+
+## Supported Languages
+
+| Language   | Extensions      | Comment Syntax |
+|------------|-----------------|----------------|
+| TypeScript | `.ts`, `.tsx`   | `/** @toon */` |
+| JavaScript | `.js`, `.jsx`   | `/** @toon */` |
+| Python     | `.py`           | `"""@toon"""` or `# @toon` |
+| Ruby       | `.rb`           | `# @toon` |
+| C#         | `.cs`           | `/** @toon */` or `/// @toon` |
+| Go         | `.go`           | `/* @toon */` |
+| Rust       | `.rs`           | `/*! @toon */` or `//! @toon` |
+
+## Token Budgets
+
+| File Complexity | Target | Max | Description |
+|-----------------|--------|-----|-------------|
+| Simple | 150 | 350 | Single export, ≤3 imports |
+| Standard | 250 | 500 | Typical component/module |
+| Complex | 400 | 800 | Many exports, flows + error handling |
+
+## Library Usage
+
+```rust
+use luny::{ParserFactory, format_toon, ToonData};
+use std::path::Path;
+
+fn main() -> anyhow::Result<()> {
+    let factory = ParserFactory::new();
+    let parser = factory.get_parser("ts").unwrap();
+
+    let source = std::fs::read_to_string("src/main.ts")?;
+    let ast_info = parser.extract_ast_info(&source, Path::new("main.ts"))?;
+
+    let toon_data = ToonData::new(
+        "Main entry point".to_string(),
+        ast_info.tokens,
+        ast_info.exports,
+    );
+
+    println!("{}", format_toon(&toon_data));
+    Ok(())
+}
+```
+
+## Development
+
+```bash
+make build      # Build debug version
+make release    # Build optimized release
+make test       # Run tests (276 tests)
+make check      # Run fmt + clippy
+make docs       # Generate rustdoc
+make install    # Install to ~/.cargo/bin
+```
+
+## MSRV (Minimum Supported Rust Version)
+
+Luny's MSRV is **Rust 1.80** (enforced via `rust-version = "1.80"` in `Cargo.toml` and checked in CI).
+
+## References
+
+- [TOON Format Specification](https://toonformat.dev/)
+- [TOON GitHub Repository](https://github.com/toon-format/toon)
+
+### Research Papers
+
+- Liu et al. (2023). "[Lost in the Middle: How Language Models Use Long Contexts](https://arxiv.org/abs/2307.03172)" - TACL
+- Hsieh et al. (2024). "[RULER: What's the Real Context Size of Your Long-Context Language Models?](https://arxiv.org/abs/2404.06654)" - COLM
+- Struppek et al. (2025). "[Focused Chain-of-Thought](https://arxiv.org/abs/2511.22176)" - arXiv
+- Gwak et al. (2025). "[Revisiting the Uniform Information Density Hypothesis](https://arxiv.org/abs/2510.06953)" - arXiv
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.

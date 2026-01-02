@@ -1,0 +1,1458 @@
+//! @toon
+//! purpose: This module parses TypeScript and JavaScript source files to extract AST
+//!     information including exports, imports, function calls, and type signatures.
+//!     It uses tree-sitter for robust parsing and handles both ES modules and CommonJS.
+//!
+//! when-editing:
+//!     - !The tree-sitter language selection depends on file extension (tsx vs ts)
+//!     - !Export kind detection has special logic for React components and hooks
+//!     - JSX detection is done by walking the AST looking for jsx_element nodes
+//!     - Hook detection uses the naming convention: starts with "use" followed by uppercase
+//!
+//! invariants:
+//!     - The parser always returns valid ASTInfo even for empty or malformed files
+//!     - Exports are only extracted from export statements, not from internal definitions
+//!     - Import items include both named imports and namespace imports (e.g., "* as foo")
+//!
+//! do-not:
+//!     - Never assume all TypeScript files have type annotations
+//!     - Never panic on parse errors; return ParseError instead
+//!     - Never use regex for AST parsing; always use tree-sitter
+//!
+//! gotchas:
+//!     - TSX files need the tsx language variant for JSX support
+//!     - Arrow function components may not be detected if they don't return JSX
+//!     - Re-exports like "export { foo } from 'bar'" are handled differently
+//!     - Type-only imports should be distinguished from value imports
+//!
+//! flows:
+//!     - Parse: Create tree-sitter parser, set language, parse source into AST
+//!     - Extract exports: Walk AST collecting export_statement nodes
+//!     - Extract imports: Walk AST collecting import_statement nodes
+//!     - Extract calls: Map imported names to modules, then find call_expression nodes
+//!     - Extract signatures: For each export, build signature from params and return type
+
+use crate::parser::{LanguageParser, ParseError};
+use crate::types::{
+    ASTInfo, CallInfo, ExportInfo, ExtractedComments, ImportInfo,
+    SignatureInfo, ToonCommentBlock, WhenEditingItem,
+};
+use std::collections::{HashMap, HashSet};
+use regex::Regex;
+use std::path::Path;
+use tree_sitter::{Node, Parser};
+
+/// Parser for TypeScript and JavaScript files
+#[derive(Clone)]
+pub struct TypeScriptParser {
+    // Tree-sitter parser is not Clone, so we create it on demand
+}
+
+impl TypeScriptParser {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    fn create_parser(&self, is_tsx: bool) -> Result<Parser, ParseError> {
+        let mut parser = Parser::new();
+        let language = if is_tsx {
+            tree_sitter_typescript::LANGUAGE_TSX.into()
+        } else {
+            tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
+        };
+        parser
+            .set_language(&language)
+            .map_err(|e| ParseError::ParseError(e.to_string()))?;
+        Ok(parser)
+    }
+
+    fn is_tsx(path: &Path) -> bool {
+        path.extension()
+            .and_then(|e| e.to_str())
+            .map(|ext| ext == "tsx" || ext == "jsx")
+            .unwrap_or(false)
+    }
+
+    fn extract_exports(&self, root: Node, source: &str) -> Vec<ExportInfo> {
+        // First pass: collect all top-level definitions
+        let definitions = self.collect_definitions(root, source);
+
+        // Second pass: collect exports
+        let mut exports = Vec::new();
+        let mut cursor = root.walk();
+
+        self.visit_exports(&mut cursor, source, &mut exports, &definitions);
+        exports
+    }
+
+    /// Collect all top-level definitions to look up export kinds
+    fn collect_definitions(&self, root: Node, source: &str) -> HashMap<String, String> {
+        let mut defs = HashMap::new();
+
+        // Iterate through top-level children of the program
+        for i in 0..root.child_count() {
+            let Some(node) = root.child(i) else { continue };
+
+            match node.kind() {
+                "function_declaration" => {
+                    if let Some(name_node) = node.child_by_field_name("name") {
+                        let name = self.node_text(name_node, source);
+                        let kind = if self.returns_jsx(node, source) {
+                            "component"
+                        } else if name.starts_with("use") && name.chars().nth(3).map(|c| c.is_uppercase()).unwrap_or(false) {
+                            "hook"
+                        } else {
+                            "fn"
+                        };
+                        defs.insert(name, kind.to_string());
+                    }
+                }
+                "lexical_declaration" | "variable_declaration" => {
+                    for j in 0..node.child_count() {
+                        if let Some(declarator) = node.child(j) {
+                            if declarator.kind() == "variable_declarator" {
+                                if let Some(name_node) = declarator.child_by_field_name("name") {
+                                    let name = self.node_text(name_node, source);
+                                    let kind = self.infer_kind_from_declarator(declarator, &name, source);
+                                    defs.insert(name, kind);
+                                }
+                            }
+                        }
+                    }
+                }
+                "class_declaration" => {
+                    if let Some(name_node) = node.child_by_field_name("name") {
+                        let name = self.node_text(name_node, source);
+                        defs.insert(name, "class".to_string());
+                    }
+                }
+                "type_alias_declaration" => {
+                    if let Some(name_node) = node.child_by_field_name("name") {
+                        let name = self.node_text(name_node, source);
+                        defs.insert(name, "type".to_string());
+                    }
+                }
+                "interface_declaration" => {
+                    if let Some(name_node) = node.child_by_field_name("name") {
+                        let name = self.node_text(name_node, source);
+                        defs.insert(name, "interface".to_string());
+                    }
+                }
+                "enum_declaration" => {
+                    if let Some(name_node) = node.child_by_field_name("name") {
+                        let name = self.node_text(name_node, source);
+                        defs.insert(name, "enum".to_string());
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        defs
+    }
+
+    /// Check if a function returns JSX (is a React component) by walking AST
+    fn returns_jsx(&self, node: Node, _source: &str) -> bool {
+        self.contains_jsx_element(node)
+    }
+
+    /// Recursively check if node or its descendants contain JSX elements
+    fn contains_jsx_element(&self, node: Node) -> bool {
+        // Check if this node is a JSX type
+        match node.kind() {
+            "jsx_element" | "jsx_self_closing_element" | "jsx_fragment" => {
+                return true;
+            }
+            _ => {}
+        }
+
+        // Recurse into children
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                if self.contains_jsx_element(child) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Infer kind from a variable declarator by looking at its value
+    fn infer_kind_from_declarator(&self, node: Node, name: &str, source: &str) -> String {
+        // Check for type annotation first - look for React component types in AST
+        if let Some(type_node) = node.child_by_field_name("type") {
+            if self.is_react_component_type(type_node, source) {
+                return "component".to_string();
+            }
+        }
+
+        // Check the value
+        if let Some(value) = node.child_by_field_name("value") {
+            match value.kind() {
+                "arrow_function" | "function" | "function_expression" => {
+                    // Check if it's a hook by naming convention (useXxx)
+                    if name.starts_with("use") && name.chars().nth(3).map(|c| c.is_uppercase()).unwrap_or(false) {
+                        return "hook".to_string();
+                    }
+                    // Check if it returns JSX (component) by AST analysis
+                    if self.returns_jsx(value, source) {
+                        return "component".to_string();
+                    }
+                    return "fn".to_string();
+                }
+                "call_expression" => {
+                    // Analyze the call expression AST
+                    if let Some(kind) = self.infer_kind_from_call(value, source) {
+                        return kind;
+                    }
+                    return "const".to_string();
+                }
+                _ => {}
+            }
+        }
+
+        "const".to_string()
+    }
+
+    /// Check if type annotation is a React component type
+    fn is_react_component_type(&self, type_node: Node, source: &str) -> bool {
+        // Look for type_identifier or generic_type nodes
+        self.find_type_name(type_node, source, &["FC", "FunctionComponent", "ComponentType", "Element"])
+    }
+
+    /// Recursively search for specific type names in a type annotation
+    fn find_type_name(&self, node: Node, source: &str, names: &[&str]) -> bool {
+        match node.kind() {
+            "type_identifier" => {
+                let name = self.node_text(node, source);
+                return names.contains(&name.as_str());
+            }
+            "member_expression" | "nested_type_identifier" => {
+                // Check the property/right side for React.FC etc
+                if let Some(prop) = node.child_by_field_name("property")
+                    .or_else(|| node.child_by_field_name("name"))
+                {
+                    let name = self.node_text(prop, source);
+                    return names.contains(&name.as_str());
+                }
+            }
+            "generic_type" => {
+                // Check the base type name
+                if let Some(name_node) = node.child_by_field_name("name") {
+                    return self.find_type_name(name_node, source, names);
+                }
+            }
+            _ => {}
+        }
+
+        // Recurse into children
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                if self.find_type_name(child, source, names) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    /// Infer kind from a call expression
+    fn infer_kind_from_call(&self, node: Node, source: &str) -> Option<String> {
+        // Get the function being called
+        let callee = node.child(0)?;
+
+        match callee.kind() {
+            "identifier" => {
+                let name = self.node_text(callee, source);
+                match name.as_str() {
+                    "createContext" => return Some("context".to_string()),
+                    "memo" | "forwardRef" | "lazy" => return Some("component".to_string()),
+                    _ => {}
+                }
+            }
+            "member_expression" => {
+                // Handle React.createContext, React.memo, etc.
+                if let Some(prop) = callee.child_by_field_name("property") {
+                    let method = self.node_text(prop, source);
+                    match method.as_str() {
+                        "createContext" => return Some("context".to_string()),
+                        "memo" | "forwardRef" | "lazy" => return Some("component".to_string()),
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        None
+    }
+
+    fn visit_exports(
+        &self,
+        cursor: &mut tree_sitter::TreeCursor,
+        source: &str,
+        exports: &mut Vec<ExportInfo>,
+        definitions: &HashMap<String, String>,
+    ) {
+        loop {
+            let node = cursor.node();
+
+            if node.kind() == "export_statement" {
+                exports.extend(self.parse_export_statement(node, source, definitions));
+            }
+
+            // Recurse into children
+            if cursor.goto_first_child() {
+                self.visit_exports(cursor, source, exports, definitions);
+                cursor.goto_parent();
+            }
+
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+
+    fn parse_export_statement(&self, node: Node, source: &str, definitions: &HashMap<String, String>) -> Vec<ExportInfo> {
+        let mut exports = Vec::new();
+
+        // Look for declaration child
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                match child.kind() {
+                    "function_declaration" | "function_signature" => {
+                        if let Some(name_node) = child.child_by_field_name("name") {
+                            let name = self.node_text(name_node, source);
+                            // Use collected definition kind, or infer from function
+                            let kind = definitions.get(&name).cloned().unwrap_or_else(|| {
+                                if self.returns_jsx(child, source) {
+                                    "component".to_string()
+                                } else if name.starts_with("use") && name.chars().nth(3).map(|c| c.is_uppercase()).unwrap_or(false) {
+                                    "hook".to_string()
+                                } else {
+                                    "fn".to_string()
+                                }
+                            });
+                            exports.push(ExportInfo { name, kind });
+                        }
+                    }
+                    "class_declaration" => {
+                        if let Some(name_node) = child.child_by_field_name("name") {
+                            let name = self.node_text(name_node, source);
+                            exports.push(ExportInfo {
+                                name,
+                                kind: "class".to_string(),
+                            });
+                        }
+                    }
+                    "lexical_declaration" | "variable_declaration" => {
+                        // export const foo = ..., bar = ...
+                        for j in 0..child.child_count() {
+                            if let Some(declarator) = child.child(j) {
+                                if declarator.kind() == "variable_declarator" {
+                                    if let Some(name_node) = declarator.child_by_field_name("name")
+                                    {
+                                        let name = self.node_text(name_node, source);
+                                        // Use collected definition kind
+                                        let kind = definitions.get(&name).cloned()
+                                            .unwrap_or_else(|| self.infer_kind_from_declarator(declarator, &name, source));
+                                        exports.push(ExportInfo { name, kind });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "type_alias_declaration" => {
+                        if let Some(name_node) = child.child_by_field_name("name") {
+                            let name = self.node_text(name_node, source);
+                            exports.push(ExportInfo {
+                                name,
+                                kind: "type".to_string(),
+                            });
+                        }
+                    }
+                    "interface_declaration" => {
+                        if let Some(name_node) = child.child_by_field_name("name") {
+                            let name = self.node_text(name_node, source);
+                            exports.push(ExportInfo {
+                                name,
+                                kind: "interface".to_string(),
+                            });
+                        }
+                    }
+                    "enum_declaration" => {
+                        if let Some(name_node) = child.child_by_field_name("name") {
+                            let name = self.node_text(name_node, source);
+                            exports.push(ExportInfo {
+                                name,
+                                kind: "enum".to_string(),
+                            });
+                        }
+                    }
+                    // Handle export { Name1, Name2 }
+                    "export_clause" => {
+                        for j in 0..child.child_count() {
+                            if let Some(spec) = child.child(j) {
+                                if spec.kind() == "export_specifier" {
+                                    if let Some(name_node) = spec.child_by_field_name("name") {
+                                        let name = self.node_text(name_node, source);
+                                        // Look up the actual definition kind
+                                        let kind = definitions.get(&name).cloned()
+                                            .unwrap_or_else(|| "const".to_string());
+                                        exports.push(ExportInfo { name, kind });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        exports
+    }
+
+    fn extract_imports(&self, root: Node, source: &str) -> Vec<ImportInfo> {
+        let mut imports = Vec::new();
+        let mut cursor = root.walk();
+
+        self.visit_imports(&mut cursor, source, &mut imports);
+        imports
+    }
+
+    fn visit_imports(
+        &self,
+        cursor: &mut tree_sitter::TreeCursor,
+        source: &str,
+        imports: &mut Vec<ImportInfo>,
+    ) {
+        loop {
+            let node = cursor.node();
+
+            if node.kind() == "import_statement" {
+                if let Some(import) = self.parse_import_statement(node, source) {
+                    imports.push(import);
+                }
+            }
+
+            if cursor.goto_first_child() {
+                self.visit_imports(cursor, source, imports);
+                cursor.goto_parent();
+            }
+
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+
+    fn parse_import_statement(&self, node: Node, source: &str) -> Option<ImportInfo> {
+        let mut from = String::new();
+        let mut items = Vec::new();
+
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                match child.kind() {
+                    "string" | "string_fragment" => {
+                        from = self.node_text(child, source).trim_matches('"').trim_matches('\'').to_string();
+                    }
+                    "import_clause" => {
+                        self.extract_import_items(child, source, &mut items);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        if !from.is_empty() {
+            Some(ImportInfo { from, items })
+        } else {
+            None
+        }
+    }
+
+    fn extract_import_items(&self, node: Node, source: &str, items: &mut Vec<String>) {
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                match child.kind() {
+                    "identifier" => {
+                        items.push(self.node_text(child, source));
+                    }
+                    "named_imports" => {
+                        self.extract_named_imports(child, source, items);
+                    }
+                    "namespace_import" => {
+                        // import * as foo
+                        if let Some(name) = child.child_by_field_name("name") {
+                            items.push(format!("* as {}", self.node_text(name, source)));
+                        }
+                    }
+                    _ => {
+                        self.extract_import_items(child, source, items);
+                    }
+                }
+            }
+        }
+    }
+
+    fn extract_named_imports(&self, node: Node, source: &str, items: &mut Vec<String>) {
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                if child.kind() == "import_specifier" {
+                    if let Some(name) = child.child_by_field_name("name") {
+                        items.push(self.node_text(name, source));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Extract function/method calls from AST, grouped by import source
+    fn extract_calls(&self, root: Node, source: &str, imports: &[ImportInfo]) -> Vec<CallInfo> {
+        // Build a map of imported names to their source modules
+        let mut import_map: HashMap<String, String> = HashMap::new();
+        for imp in imports {
+            for item in &imp.items {
+                // Handle "* as X" imports
+                let name = if item.starts_with("* as ") {
+                    item.strip_prefix("* as ").unwrap_or(item)
+                } else {
+                    item.as_str()
+                };
+                import_map.insert(name.to_string(), imp.from.clone());
+            }
+        }
+
+        let mut calls: Vec<CallInfo> = Vec::new();
+        let mut seen: HashSet<(String, String)> = HashSet::new();
+        let mut cursor = root.walk();
+
+        self.visit_calls(&mut cursor, source, &import_map, &mut calls, &mut seen);
+        calls
+    }
+
+    fn visit_calls(
+        &self,
+        cursor: &mut tree_sitter::TreeCursor,
+        source: &str,
+        import_map: &HashMap<String, String>,
+        calls: &mut Vec<CallInfo>,
+        seen: &mut HashSet<(String, String)>,
+    ) {
+        loop {
+            let node = cursor.node();
+
+            if node.kind() == "call_expression" {
+                if let Some(call) = self.parse_call_expression(node, source, import_map) {
+                    let key = (call.target.clone(), call.method.clone());
+                    if !seen.contains(&key) {
+                        seen.insert(key);
+                        calls.push(call);
+                    }
+                }
+            }
+
+            if cursor.goto_first_child() {
+                self.visit_calls(cursor, source, import_map, calls, seen);
+                cursor.goto_parent();
+            }
+
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+
+    fn parse_call_expression(
+        &self,
+        node: Node,
+        source: &str,
+        import_map: &HashMap<String, String>,
+    ) -> Option<CallInfo> {
+        // Get the function being called (first child)
+        let callee = node.child(0)?;
+
+        match callee.kind() {
+            // Direct call: foo()
+            "identifier" => {
+                let name = self.node_text(callee, source);
+                if let Some(target) = import_map.get(&name) {
+                    return Some(CallInfo {
+                        target: target.clone(),
+                        method: name,
+                    });
+                }
+            }
+            // Member call: foo.bar() or foo.bar.baz()
+            "member_expression" => {
+                let (obj_name, method_name) = self.parse_member_expression(callee, source)?;
+                if let Some(target) = import_map.get(&obj_name) {
+                    return Some(CallInfo {
+                        target: target.clone(),
+                        method: method_name,
+                    });
+                }
+            }
+            _ => {}
+        }
+        None
+    }
+
+    fn parse_member_expression(&self, node: Node, source: &str) -> Option<(String, String)> {
+        let obj = node.child_by_field_name("object")?;
+        let prop = node.child_by_field_name("property")?;
+
+        let method = self.node_text(prop, source);
+
+        // Get the root object name (handles nested member expressions)
+        let obj_name = match obj.kind() {
+            "identifier" => self.node_text(obj, source),
+            "member_expression" => {
+                // For nested like a.b.c(), get 'a'
+                self.get_root_identifier(obj, source)?
+            }
+            _ => return None,
+        };
+
+        Some((obj_name, method))
+    }
+
+    fn get_root_identifier(&self, node: Node, source: &str) -> Option<String> {
+        match node.kind() {
+            "identifier" => Some(self.node_text(node, source)),
+            "member_expression" => {
+                let obj = node.child_by_field_name("object")?;
+                self.get_root_identifier(obj, source)
+            }
+            _ => None,
+        }
+    }
+
+    /// Extract signatures for exported functions/components
+    fn extract_signatures(&self, root: Node, source: &str, exports: &[ExportInfo]) -> Vec<SignatureInfo> {
+        let export_names: HashSet<&str> = exports.iter().map(|e| e.name.as_str()).collect();
+        let mut signatures = Vec::new();
+        let mut cursor = root.walk();
+
+        self.visit_signatures(&mut cursor, source, &export_names, &mut signatures);
+        signatures
+    }
+
+    fn visit_signatures(
+        &self,
+        cursor: &mut tree_sitter::TreeCursor,
+        source: &str,
+        export_names: &HashSet<&str>,
+        signatures: &mut Vec<SignatureInfo>,
+    ) {
+        loop {
+            let node = cursor.node();
+
+            match node.kind() {
+                "function_declaration" => {
+                    if let Some(sig) = self.extract_function_signature(node, source, export_names) {
+                        signatures.push(sig);
+                    }
+                }
+                "lexical_declaration" | "variable_declaration" => {
+                    // Handle: const Foo = (props) => ... or const Foo: Type = ...
+                    for i in 0..node.child_count() {
+                        if let Some(declarator) = node.child(i) {
+                            if declarator.kind() == "variable_declarator" {
+                                if let Some(sig) = self.extract_variable_signature(declarator, source, export_names) {
+                                    signatures.push(sig);
+                                }
+                            }
+                        }
+                    }
+                }
+                "type_alias_declaration" => {
+                    if let Some(sig) = self.extract_type_alias_signature(node, source, export_names) {
+                        signatures.push(sig);
+                    }
+                }
+                "interface_declaration" => {
+                    if let Some(sig) = self.extract_interface_signature(node, source, export_names) {
+                        signatures.push(sig);
+                    }
+                }
+                _ => {}
+            }
+
+            if cursor.goto_first_child() {
+                self.visit_signatures(cursor, source, export_names, signatures);
+                cursor.goto_parent();
+            }
+
+            if !cursor.goto_next_sibling() {
+                break;
+            }
+        }
+    }
+
+    fn extract_function_signature(
+        &self,
+        node: Node,
+        source: &str,
+        export_names: &HashSet<&str>,
+    ) -> Option<SignatureInfo> {
+        let name_node = node.child_by_field_name("name")?;
+        let name = self.node_text(name_node, source);
+
+        if !export_names.contains(name.as_str()) {
+            return None;
+        }
+
+        // Determine kind from function analysis
+        let kind = if self.returns_jsx(node, source) {
+            "component".to_string()
+        } else if name.starts_with("use") && name.chars().nth(3).map(|c| c.is_uppercase()).unwrap_or(false) {
+            "hook".to_string()
+        } else {
+            "fn".to_string()
+        };
+
+        // Build signature from parameters and return type
+        let params = node.child_by_field_name("parameters")
+            .map(|p| self.node_text(p, source))
+            .unwrap_or_else(|| "()".to_string());
+
+        let return_type = node.child_by_field_name("return_type")
+            .map(|r| self.node_text(r, source))
+            .unwrap_or_default();
+
+        let signature = if return_type.is_empty() {
+            params
+        } else {
+            format!("{} {}", params, return_type)
+        };
+
+        Some(SignatureInfo { name, kind, signature })
+    }
+
+    fn extract_variable_signature(
+        &self,
+        node: Node,
+        source: &str,
+        export_names: &HashSet<&str>,
+    ) -> Option<SignatureInfo> {
+        let name_node = node.child_by_field_name("name")?;
+        let name = self.node_text(name_node, source);
+
+        if !export_names.contains(name.as_str()) {
+            return None;
+        }
+
+        // Determine kind from declarator analysis
+        let kind = self.infer_kind_from_declarator(node, &name, source);
+
+        // Try to get type annotation
+        let type_ann = node.child_by_field_name("type");
+
+        // Try to get value (arrow function, function expression, etc.)
+        let value = node.child_by_field_name("value");
+
+        let signature = if let Some(type_node) = type_ann {
+            // Has explicit type annotation
+            self.node_text(type_node, source).trim_start_matches(':').trim().to_string()
+        } else if let Some(val) = value {
+            // Infer from value
+            self.infer_signature_from_value(val, source)
+        } else {
+            String::new()
+        };
+
+        if signature.is_empty() {
+            return None;
+        }
+
+        Some(SignatureInfo { name, kind, signature })
+    }
+
+    fn infer_signature_from_value(&self, node: Node, source: &str) -> String {
+        match node.kind() {
+            "arrow_function" => {
+                let params = node.child_by_field_name("parameters")
+                    .or_else(|| node.child_by_field_name("parameter"))
+                    .map(|p| self.node_text(p, source))
+                    .unwrap_or_else(|| "()".to_string());
+
+                let return_type = node.child_by_field_name("return_type")
+                    .map(|r| self.node_text(r, source))
+                    .unwrap_or_default();
+
+                if return_type.is_empty() {
+                    format!("{} => ...", params)
+                } else {
+                    format!("{} {} => ...", params, return_type)
+                }
+            }
+            "function" | "function_expression" => {
+                let params = node.child_by_field_name("parameters")
+                    .map(|p| self.node_text(p, source))
+                    .unwrap_or_else(|| "()".to_string());
+                params
+            }
+            _ => String::new()
+        }
+    }
+
+    fn extract_type_alias_signature(
+        &self,
+        node: Node,
+        source: &str,
+        export_names: &HashSet<&str>,
+    ) -> Option<SignatureInfo> {
+        // type Foo = ... or type Foo<T> = ...
+        let name_node = node.child_by_field_name("name")?;
+        let name = self.node_text(name_node, source);
+
+        if !export_names.contains(name.as_str()) {
+            return None;
+        }
+
+        // Get type parameters if present (e.g., <T, U>)
+        let type_params = node.child_by_field_name("type_parameters")
+            .map(|p| self.node_text(p, source))
+            .unwrap_or_default();
+
+        // Get the value (right side of =)
+        let value = node.child_by_field_name("value")
+            .map(|v| self.node_text(v, source))
+            .unwrap_or_default();
+
+        let signature = if type_params.is_empty() {
+            value
+        } else {
+            format!("{} = {}", type_params, value)
+        };
+
+        if signature.is_empty() {
+            return None;
+        }
+
+        Some(SignatureInfo {
+            name,
+            kind: "type".to_string(),
+            signature,
+        })
+    }
+
+    fn extract_interface_signature(
+        &self,
+        node: Node,
+        source: &str,
+        export_names: &HashSet<&str>,
+    ) -> Option<SignatureInfo> {
+        let name_node = node.child_by_field_name("name")?;
+        let name = self.node_text(name_node, source);
+
+        if !export_names.contains(name.as_str()) {
+            return None;
+        }
+
+        // Get type parameters if present
+        let type_params = node.child_by_field_name("type_parameters")
+            .map(|p| self.node_text(p, source))
+            .unwrap_or_default();
+
+        // Get extends clause if present
+        let mut extends_clause = String::new();
+        for i in 0..node.child_count() {
+            if let Some(child) = node.child(i) {
+                if child.kind() == "extends_type_clause" {
+                    extends_clause = format!(" {}", self.node_text(child, source));
+                    break;
+                }
+            }
+        }
+
+        // Get interface body - summarize fields
+        let body = node.child_by_field_name("body");
+        let fields_summary = if let Some(body_node) = body {
+            self.summarize_interface_body(body_node, source)
+        } else {
+            "{}".to_string()
+        };
+
+        let signature = format!("{}{} {}", type_params, extends_clause, fields_summary);
+
+        Some(SignatureInfo {
+            name,
+            kind: "interface".to_string(),
+            signature: signature.trim().to_string(),
+        })
+    }
+
+    fn summarize_interface_body(&self, body: Node, source: &str) -> String {
+        // Extract field names and types, limit to keep signature manageable
+        let mut fields: Vec<String> = Vec::new();
+
+        for i in 0..body.child_count() {
+            if let Some(child) = body.child(i) {
+                match child.kind() {
+                    "property_signature" | "method_signature" => {
+                        if let Some(name_node) = child.child_by_field_name("name") {
+                            let field_name = self.node_text(name_node, source);
+                            let optional = child.child_by_field_name("optional").is_some();
+                            let type_ann = child.child_by_field_name("type")
+                                .map(|t| self.node_text(t, source))
+                                .unwrap_or_default();
+
+                            let field = if optional {
+                                format!("{}?{}", field_name, type_ann)
+                            } else {
+                                format!("{}{}", field_name, type_ann)
+                            };
+                            fields.push(field);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            // Limit to 5 fields to keep signature readable
+            if fields.len() >= 5 {
+                fields.push("...".to_string());
+                break;
+            }
+        }
+
+        if fields.is_empty() {
+            "{}".to_string()
+        } else {
+            format!("{{ {} }}", fields.join("; "))
+        }
+    }
+
+    fn node_text(&self, node: Node, source: &str) -> String {
+        source[node.start_byte()..node.end_byte()].to_string()
+    }
+
+    fn parse_toon_block(&self, content: &str) -> ToonCommentBlock {
+        let mut block = ToonCommentBlock::default();
+
+        // Parse the first line as purpose if it doesn't start with a section header
+        let lines: Vec<&str> = content.lines().collect();
+        let mut current_section: Option<&str> = None;
+        let mut current_items: Vec<String> = Vec::new();
+
+        for line in lines {
+            let trimmed = line.trim().trim_start_matches('*').trim();
+
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            // Check for section headers
+            if let Some(header) = self.parse_section_header(trimmed) {
+                // Save previous section
+                self.save_section(&mut block, current_section, &current_items);
+                current_section = Some(header);
+                current_items.clear();
+            } else if current_section.is_none() && block.purpose.is_none() {
+                // First non-empty line is purpose
+                block.purpose = Some(trimmed.to_string());
+            } else if trimmed.starts_with('-') || trimmed.starts_with('•') {
+                // List item
+                let item = trimmed.trim_start_matches('-').trim_start_matches('•').trim();
+                if !item.is_empty() {
+                    current_items.push(item.to_string());
+                }
+            } else if current_section.is_some() {
+                // Continuation of section
+                current_items.push(trimmed.to_string());
+            }
+        }
+
+        // Save last section
+        self.save_section(&mut block, current_section, &current_items);
+
+        block
+    }
+
+    fn parse_section_header<'a>(&self, line: &'a str) -> Option<&'a str> {
+        let headers = [
+            "When-Editing:",
+            "When Editing:",
+            "DO-NOT:",
+            "Do-Not:",
+            "Invariants:",
+            "Error Handling:",
+            "Error-Handling:",
+            "Constraints:",
+            "Gotchas:",
+            "Flows:",
+            "Testing:",
+            "Common Mistakes:",
+            "Common-Mistakes:",
+            "Change Impacts:",
+            "Change-Impacts:",
+            "Related:",
+        ];
+
+        for header in headers {
+            if line.eq_ignore_ascii_case(header) || line.starts_with(header) {
+                return Some(header.trim_end_matches(':'));
+            }
+        }
+        None
+    }
+
+    fn save_section(
+        &self,
+        block: &mut ToonCommentBlock,
+        section: Option<&str>,
+        items: &[String],
+    ) {
+        if items.is_empty() {
+            return;
+        }
+
+        match section {
+            Some(s) if s.eq_ignore_ascii_case("When-Editing") || s.eq_ignore_ascii_case("When Editing") => {
+                block.when_editing = Some(
+                    items
+                        .iter()
+                        .map(|item| {
+                            let important = item.starts_with('!');
+                            let text = if important { &item[1..] } else { item };
+                            WhenEditingItem {
+                                text: text.trim().to_string(),
+                                important,
+                            }
+                        })
+                        .collect(),
+                );
+            }
+            Some(s) if s.eq_ignore_ascii_case("DO-NOT") || s.eq_ignore_ascii_case("Do-Not") => {
+                block.do_not = Some(items.to_vec());
+            }
+            Some(s) if s.eq_ignore_ascii_case("Invariants") || s.eq_ignore_ascii_case("Invariant") => {
+                block.invariants = Some(items.to_vec());
+            }
+            Some(s) if s.eq_ignore_ascii_case("Error Handling") || s.eq_ignore_ascii_case("Error-Handling") => {
+                block.error_handling = Some(items.to_vec());
+            }
+            Some(s) if s.eq_ignore_ascii_case("Constraints") || s.eq_ignore_ascii_case("Constraint") => {
+                block.constraints = Some(items.to_vec());
+            }
+            Some(s) if s.eq_ignore_ascii_case("Gotchas") || s.eq_ignore_ascii_case("Gotcha") => {
+                block.gotchas = Some(items.to_vec());
+            }
+            Some(s) if s.eq_ignore_ascii_case("Flows") || s.eq_ignore_ascii_case("Flow") => {
+                block.flows = Some(items.to_vec());
+            }
+            Some(s) if s.eq_ignore_ascii_case("Testing") => {
+                block.testing = Some(items.to_vec());
+            }
+            Some(s) if s.eq_ignore_ascii_case("Common Mistakes") || s.eq_ignore_ascii_case("Common-Mistakes") => {
+                block.common_mistakes = Some(items.to_vec());
+            }
+            Some(s) if s.eq_ignore_ascii_case("Change Impacts") || s.eq_ignore_ascii_case("Change-Impacts") => {
+                block.change_impacts = Some(items.to_vec());
+            }
+            Some(s) if s.eq_ignore_ascii_case("Related") => {
+                block.related = Some(items.to_vec());
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Default for TypeScriptParser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LanguageParser for TypeScriptParser {
+    fn language_name(&self) -> &'static str {
+        "typescript"
+    }
+
+    fn file_extensions(&self) -> &[&'static str] {
+        &["ts", "tsx", "js", "jsx"]
+    }
+
+    fn extract_ast_info(&self, source: &str, file_path: &Path) -> Result<ASTInfo, ParseError> {
+        let mut parser = self.create_parser(Self::is_tsx(file_path))?;
+        let tree = parser
+            .parse(source, None)
+            .ok_or_else(|| ParseError::ParseError("Failed to parse source".to_string()))?;
+
+        let root = tree.root_node();
+
+        let exports = self.extract_exports(root, source);
+        let imports = self.extract_imports(root, source);
+        let calls = self.extract_calls(root, source, &imports);
+        let signatures = self.extract_signatures(root, source, &exports);
+
+        // Calculate approximate tokens
+        let tokens = source.len() / 4;
+
+        Ok(ASTInfo {
+            tokens,
+            exports,
+            imports,
+            calls,
+            signatures,
+        })
+    }
+
+    fn extract_toon_comments(&self, source: &str) -> Result<ExtractedComments, ParseError> {
+        let mut result = ExtractedComments::default();
+
+        // Find @toon block comments using regex
+        let block_pattern = Regex::new(r"/\*\*[\s\S]*?@toon[\s\S]*?\*/").unwrap();
+
+        if let Some(mat) = block_pattern.find(source) {
+            let comment = mat.as_str();
+            // Extract content between /** and */
+            let content = comment
+                .trim_start_matches("/**")
+                .trim_end_matches("*/")
+                .trim();
+
+            // Remove @toon marker
+            let content = content
+                .lines()
+                .map(|line| {
+                    let trimmed = line.trim().trim_start_matches('*').trim();
+                    if trimmed == "@toon" {
+                        ""
+                    } else {
+                        trimmed
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            result.file_block = Some(self.parse_toon_block(&content));
+        }
+
+        Ok(result)
+    }
+
+    fn strip_toon_comments(&self, source: &str, toon_path: &str) -> Result<String, ParseError> {
+        let mut result = source.to_string();
+
+        // Replace block @toon comments with stub
+        let block_pattern = Regex::new(r"/\*\*[\s\S]*?@toon[\s\S]*?\*/").unwrap();
+        result = block_pattern
+            .replace_all(&result, &format!("// @toon → {}", toon_path))
+            .to_string();
+
+        // Remove single-line @toon comments
+        let single_pattern = Regex::new(r"//\s*@toon:[^\n]*\n?").unwrap();
+        result = single_pattern.replace_all(&result, "").to_string();
+
+        Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TS_FIXTURE: &str = include_str!("../../test_fixtures/sample.ts");
+    const TSX_FIXTURE: &str = include_str!("../../test_fixtures/sample.tsx");
+    const JS_FIXTURE: &str = include_str!("../../test_fixtures/sample.js");
+
+    #[test]
+    fn test_language_name() {
+        let parser = TypeScriptParser::new();
+        assert_eq!(parser.language_name(), "typescript");
+    }
+
+    #[test]
+    fn test_file_extensions() {
+        let parser = TypeScriptParser::new();
+        let exts = parser.file_extensions();
+        assert!(exts.contains(&"ts"));
+        assert!(exts.contains(&"tsx"));
+        assert!(exts.contains(&"js"));
+        assert!(exts.contains(&"jsx"));
+    }
+
+    #[test]
+    fn test_extract_exports_ts() {
+        let parser = TypeScriptParser::new();
+        let info = parser.extract_ast_info(TS_FIXTURE, Path::new("sample.ts")).unwrap();
+
+        assert!(!info.exports.is_empty());
+
+        // Check for type exports
+        let type_exports: Vec<_> = info.exports.iter()
+            .filter(|e| e.kind == "type")
+            .collect();
+        assert!(!type_exports.is_empty());
+        assert!(type_exports.iter().any(|e| e.name == "UserId"));
+
+        // Check for interface exports
+        let interface_exports: Vec<_> = info.exports.iter()
+            .filter(|e| e.kind == "interface")
+            .collect();
+        assert!(interface_exports.iter().any(|e| e.name == "UserConfig"));
+
+        // Check for class exports
+        let class_exports: Vec<_> = info.exports.iter()
+            .filter(|e| e.kind == "class")
+            .collect();
+        assert!(class_exports.iter().any(|e| e.name == "UserService"));
+
+        // Check for function exports
+        let fn_exports: Vec<_> = info.exports.iter()
+            .filter(|e| e.kind == "fn")
+            .collect();
+        assert!(!fn_exports.is_empty());
+        assert!(fn_exports.iter().any(|e| e.name == "validateUser"));
+
+        // Check for enum exports
+        let enum_exports: Vec<_> = info.exports.iter()
+            .filter(|e| e.kind == "enum")
+            .collect();
+        assert!(enum_exports.iter().any(|e| e.name == "Status"));
+    }
+
+    #[test]
+    fn test_extract_exports_tsx() {
+        let parser = TypeScriptParser::new();
+        let info = parser.extract_ast_info(TSX_FIXTURE, Path::new("sample.tsx")).unwrap();
+
+        assert!(!info.exports.is_empty());
+
+        // Check for hook exports (useUser, useToggle)
+        let hook_exports: Vec<_> = info.exports.iter()
+            .filter(|e| e.kind == "hook")
+            .collect();
+        assert!(hook_exports.iter().any(|e| e.name == "useUser"));
+        assert!(hook_exports.iter().any(|e| e.name == "useToggle"));
+
+        // Check for component exports
+        let component_exports: Vec<_> = info.exports.iter()
+            .filter(|e| e.kind == "component")
+            .collect();
+        assert!(component_exports.iter().any(|e| e.name == "Button"));
+        assert!(component_exports.iter().any(|e| e.name == "UserCard"));
+    }
+
+    #[test]
+    fn test_extract_imports_ts() {
+        let parser = TypeScriptParser::new();
+        let info = parser.extract_ast_info(TS_FIXTURE, Path::new("sample.ts")).unwrap();
+
+        assert!(!info.imports.is_empty());
+
+        // Check fs/promises import
+        let fs_import = info.imports.iter()
+            .find(|i| i.from == "fs/promises");
+        assert!(fs_import.is_some());
+        let fs_items = &fs_import.unwrap().items;
+        assert!(fs_items.contains(&"readFile".to_string()));
+        assert!(fs_items.contains(&"writeFile".to_string()));
+
+        // Check namespace import
+        let path_import = info.imports.iter()
+            .find(|i| i.from == "path");
+        assert!(path_import.is_some());
+    }
+
+    #[test]
+    fn test_extract_imports_tsx() {
+        let parser = TypeScriptParser::new();
+        let info = parser.extract_ast_info(TSX_FIXTURE, Path::new("sample.tsx")).unwrap();
+
+        // Check React import
+        let react_import = info.imports.iter()
+            .find(|i| i.from == "react");
+        assert!(react_import.is_some());
+        let react_items = &react_import.unwrap().items;
+        assert!(react_items.contains(&"useState".to_string()));
+        assert!(react_items.contains(&"useEffect".to_string()));
+    }
+
+    #[test]
+    fn test_extract_calls_ts() {
+        let parser = TypeScriptParser::new();
+        let info = parser.extract_ast_info(TS_FIXTURE, Path::new("sample.ts")).unwrap();
+
+        // Check for calls to imported functions
+        let read_calls: Vec<_> = info.calls.iter()
+            .filter(|c| c.method == "readFile")
+            .collect();
+        assert!(!read_calls.is_empty());
+
+        let write_calls: Vec<_> = info.calls.iter()
+            .filter(|c| c.method == "writeFile")
+            .collect();
+        assert!(!write_calls.is_empty());
+    }
+
+    #[test]
+    fn test_extract_signatures_ts() {
+        let parser = TypeScriptParser::new();
+        let info = parser.extract_ast_info(TS_FIXTURE, Path::new("sample.ts")).unwrap();
+
+        // Check that signatures are extracted for exports
+        assert!(!info.signatures.is_empty());
+
+        // Check interface signature
+        let user_config_sig = info.signatures.iter()
+            .find(|s| s.name == "UserConfig");
+        assert!(user_config_sig.is_some());
+        assert_eq!(user_config_sig.unwrap().kind, "interface");
+    }
+
+    #[test]
+    fn test_extract_js_file() {
+        let parser = TypeScriptParser::new();
+        let info = parser.extract_ast_info(JS_FIXTURE, Path::new("sample.js")).unwrap();
+
+        assert!(!info.exports.is_empty());
+        assert!(!info.imports.is_empty());
+
+        // Check class export
+        let logger_export = info.exports.iter()
+            .find(|e| e.name == "Logger");
+        assert!(logger_export.is_some());
+        assert_eq!(logger_export.unwrap().kind, "class");
+    }
+
+    #[test]
+    fn test_extract_toon_comments() {
+        let parser = TypeScriptParser::new();
+        let comments = parser.extract_toon_comments(TS_FIXTURE).unwrap();
+
+        assert!(comments.file_block.is_some());
+        let block = comments.file_block.unwrap();
+        assert!(block.purpose.is_some());
+        assert!(block.purpose.unwrap().contains("Sample TypeScript"));
+    }
+
+    #[test]
+    fn test_strip_toon_comments() {
+        let parser = TypeScriptParser::new();
+        let stripped = parser.strip_toon_comments(TS_FIXTURE, "sample.ts.toon").unwrap();
+
+        // Should have replaced @toon block with stub
+        assert!(stripped.contains("// @toon"));
+        assert!(stripped.contains("sample.ts.toon"));
+        // Original @toon block should be gone
+        assert!(!stripped.contains("/** @toon"));
+    }
+
+    #[test]
+    fn test_empty_source() {
+        let parser = TypeScriptParser::new();
+        let info = parser.extract_ast_info("", Path::new("empty.ts")).unwrap();
+
+        assert!(info.exports.is_empty());
+        assert!(info.imports.is_empty());
+        assert!(info.calls.is_empty());
+        assert!(info.signatures.is_empty());
+    }
+
+    #[test]
+    fn test_token_estimation() {
+        let parser = TypeScriptParser::new();
+        let source = "export const foo = 'bar';";
+        let info = parser.extract_ast_info(source, Path::new("test.ts")).unwrap();
+
+        // Tokens should be approximately source.len() / 4
+        assert!(info.tokens > 0);
+        assert_eq!(info.tokens, source.len() / 4);
+    }
+
+    #[test]
+    fn test_is_tsx_detection() {
+        assert!(TypeScriptParser::is_tsx(Path::new("component.tsx")));
+        assert!(TypeScriptParser::is_tsx(Path::new("component.jsx")));
+        assert!(!TypeScriptParser::is_tsx(Path::new("module.ts")));
+        assert!(!TypeScriptParser::is_tsx(Path::new("module.js")));
+    }
+
+    #[test]
+    fn test_default_impl() {
+        let parser = TypeScriptParser::new();
+        assert_eq!(parser.language_name(), "typescript");
+    }
+
+    #[test]
+    fn test_arrow_function_export() {
+        let parser = TypeScriptParser::new();
+        let source = r#"export const add = (a: number, b: number): number => a + b;"#;
+        let info = parser.extract_ast_info(source, Path::new("test.ts")).unwrap();
+
+        assert_eq!(info.exports.len(), 1);
+        assert_eq!(info.exports[0].name, "add");
+        assert_eq!(info.exports[0].kind, "fn");
+    }
+
+    #[test]
+    fn test_type_alias_export() {
+        let parser = TypeScriptParser::new();
+        let source = r#"export type Result<T, E = Error> = { ok: true; value: T } | { ok: false; error: E };"#;
+        let info = parser.extract_ast_info(source, Path::new("test.ts")).unwrap();
+
+        let result_export = info.exports.iter().find(|e| e.name == "Result");
+        assert!(result_export.is_some());
+        assert_eq!(result_export.unwrap().kind, "type");
+    }
+
+    #[test]
+    fn test_re_export() {
+        let parser = TypeScriptParser::new();
+        let source = r#"
+const foo = 'bar';
+export { foo };
+"#;
+        let info = parser.extract_ast_info(source, Path::new("test.ts")).unwrap();
+
+        let foo_export = info.exports.iter().find(|e| e.name == "foo");
+        assert!(foo_export.is_some());
+    }
+
+    #[test]
+    fn test_namespace_import() {
+        let parser = TypeScriptParser::new();
+        let source = r#"import * as path from 'path';"#;
+        let info = parser.extract_ast_info(source, Path::new("test.ts")).unwrap();
+
+        // Namespace imports extract the module name
+        let path_import = info.imports.iter().find(|i| i.from == "path");
+        assert!(path_import.is_some());
+    }
+
+    #[test]
+    fn test_parse_toon_block_sections() {
+        let parser = TypeScriptParser::new();
+        let content = r#"
+purpose: Test purpose line
+
+when-editing:
+    - !Important item
+    - Normal item
+
+invariants:
+    - Rule one
+    - Rule two
+
+do-not:
+    - Forbidden action
+"#;
+        let block = parser.parse_toon_block(content);
+
+        assert!(block.purpose.is_some());
+        assert!(block.when_editing.is_some());
+        let we = block.when_editing.unwrap();
+        assert_eq!(we.len(), 2);
+        assert!(we[0].important);
+        assert!(!we[1].important);
+
+        assert!(block.invariants.is_some());
+        assert!(block.do_not.is_some());
+    }
+}
