@@ -1,4 +1,4 @@
-purpose: This module defines all core data types used throughout luny, including export information, import tracking, call relationships, and the main ToonData structure that represents the complete DOSE for a source file.
+purpose: This module defines all core data types used throughout luny, including export
 tokens: ~2298
 exports[22]: ExportInfo(struct), ImportInfo(struct), CallInfo(struct), CalledByInfo(struct), SignatureInfo(struct), WhenEditingItem(struct), FunctionAnnotation(struct), ASTInfo(struct), ExtractedComments(struct), ToonCommentBlock(struct), ToonData(struct), new(method(ToonData)), new(fn), ValidationResult(struct), new(method(ValidationResult)), is_valid(method(ValidationResult)), add_error(method(ValidationResult)), add_warning(method(ValidationResult)), new(fn), is_valid(fn), add_error(fn), add_warning(fn)
 signatures[17]:

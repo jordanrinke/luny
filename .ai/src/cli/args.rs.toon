@@ -1,4 +1,4 @@
-purpose: This module defines the command-line interface for luny using the clap derive macros. It specifies all commands (generate, validate, strip) and their arguments.
+purpose: This module defines the command-line interface for luny using the clap derive
 tokens: ~3277
 exports[5]: Cli(struct), Commands(enum), GenerateArgs(struct), ValidateArgs(struct), StripArgs(struct)
 signatures[5]:

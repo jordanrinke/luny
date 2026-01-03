@@ -79,7 +79,7 @@ pub struct SignatureInfo {
 }
 
 /// When-editing item with optional importance flag
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WhenEditingItem {
     /// The guidance text
     pub text: String,

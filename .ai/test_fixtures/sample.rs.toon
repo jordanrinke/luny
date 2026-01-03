@@ -1,4 +1,4 @@
-purpose: Sample Rust fixture for testing the luny Rust parser. This file contains various Rust constructs including structs, enums, traits, and impl blocks to verify extraction works correctly.
+purpose: Sample Rust fixture for testing the luny Rust parser.
 tokens: ~2033
 exports[30]: UserId(type), Result(type), VERSION(const), DEFAULT_TIMEOUT(const), MAX_RETRIES(const), Error(enum), Repository(trait), UserConfig(struct), new(method(UserConfig)), with_email(method(UserConfig)), add_setting(method(UserConfig)), new(fn), with_email(fn), add_setting(fn), UserService(struct), new(method(UserService)), clear_cache(method(UserService)), new(fn), clear_cache(fn), create_user(fn), validate_email(fn), Cache(struct), new(method(Cache<K, V>)), get(method(Cache<K, V>)), set(method(Cache<K, V>)), new(fn), get(fn), set(fn), UserStatus(enum), log_info(macro)
 signatures[19]:
@@ -21,9 +21,9 @@ signatures[19]:
   get(fn): (&self, key: &K) Option<&V>
   set(fn): (&mut self, key: K, value: V)
   UserStatus(enum): { Active | Inactive | Pending | Suspended }
-when-editing: - !Keep all pub visibility modifiers represented for comprehensive testing - Maintain the mix of sync and async patte...
-invariants: - Exported items must have the pub modifier - Private items should not be extracted as exports - Include examples of ...
-do-not: - Remove any exports without updating corresponding tests - Use unsafe code in this fixture unless testing unsafe ext...
+when-editing: !Keep all pub visibility modifiers represented for comprehensive testing; Maintain the mix of sync and async patterns (if async-std/tokio were included)
+invariants: Exported items must have the pub modifier; Private items should not be extracted as exports; Include examples of traits, structs, enums, and functions
+do-not: Remove any exports without updating corresponding tests; Use unsafe code in this fixture unless testing unsafe extraction
 imports[8]{from,items}: std::collections,HashMap; std::fs,self|File; std::io,self|Read|Write; std::path,Path|PathBuf; std::sync,Arc|RwLock; serde,Deserialize|Serialize; std::time,SystemTime|UNIX_EPOCH; super::*,super::*
-calls[4]{target,methods}: std::time,now().duration_since(UNIX_EPOCH).unwrap|now().duration_since|now; std::sync,new; std::fs,open|create; std::collections,new
-gotchas: - Rust uses explicit pub modifier for visibility - Trait implementations are extracted differently from inherent impl...
+calls[4]{target,methods}: std::fs,open|create; std::time,now().duration_since|now|now().duration_since(UNIX_EPOCH).unwrap; std::collections,new; std::sync,new
+gotchas: Rust uses explicit pub modifier for visibility; Trait implementations are extracted differently from inherent impls; Generic bounds affect signature extraction

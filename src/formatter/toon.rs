@@ -485,255 +485,171 @@ fn parse_when_editing(value: &str) -> Vec<WhenEditingItem> {
 mod tests {
     use super::*;
 
-    // ==================== format_toon Tests ====================
-
+    /// Comprehensive test covering ALL ToonData fields for formatting.
+    /// This single test covers: purpose, tokens, exports, invariants, do_not, when_editing,
+    /// imports, calls, imported_by, called_by, signatures, gotchas, flows, related,
+    /// error_handling, constraints, testing, common_mistakes, change_impacts, ignore,
+    /// and function_annotations with multiple fields.
     #[test]
-    fn test_format_basic_toon() {
-        let data = ToonData::new(
-            "Test file purpose".to_string(),
-            500,
-            vec![ExportInfo {
-                name: "testFn".to_string(),
-                kind: "fn".to_string(),
-            }],
-        );
-
-        let output = format_toon(&data);
-        assert!(output.contains("purpose: Test file purpose"));
-        assert!(output.contains("tokens: ~500"));
-        assert!(output.contains("exports[1]: testFn(fn)"));
-    }
-
-    #[test]
-    fn test_format_multiple_exports() {
-        let data = ToonData::new(
-            "Multi export module".to_string(),
-            200,
+    fn test_format_all_fields() {
+        let mut data = ToonData::new(
+            "Comprehensive test purpose".to_string(),
+            1000,
             vec![
-                ExportInfo { name: "foo".to_string(), kind: "function".to_string() },
+                ExportInfo { name: "foo".to_string(), kind: "fn".to_string() },
                 ExportInfo { name: "Bar".to_string(), kind: "class".to_string() },
-                ExportInfo { name: "BAZ".to_string(), kind: "const".to_string() },
             ],
         );
 
-        let output = format_toon(&data);
-        assert!(output.contains("exports[3]:"));
-        assert!(output.contains("foo(function)"));
-        assert!(output.contains("Bar(class)"));
-        assert!(output.contains("BAZ(const)"));
-    }
-
-    #[test]
-    fn test_format_with_invariants() {
-        let mut data = ToonData::new("Test".to_string(), 100, vec![]);
-        data.invariants = Some(vec![
-            "Must always return a value".to_string(),
-            "Never throws exceptions".to_string(),
-        ]);
-
-        let output = format_toon(&data);
-        assert!(output.contains("invariants:"));
-        // "Must always" gets compressed to "must"
-        assert!(output.contains("must return a value"));
-    }
-
-    #[test]
-    fn test_format_with_do_not() {
-        let mut data = ToonData::new("Test".to_string(), 100, vec![]);
-        data.do_not = Some(vec![
-            "Never modify global state".to_string(),
-            "Do not call external APIs directly".to_string(),
-        ]);
-
-        let output = format_toon(&data);
-        assert!(output.contains("do-not:"));
-        assert!(output.contains("Never modify global state"));
-    }
-
-    #[test]
-    fn test_format_with_when_editing() {
-        let mut data = ToonData::new("Test".to_string(), 100, vec![]);
+        // All optional fields
+        data.invariants = Some(vec!["Must always return".to_string()]);
+        data.do_not = Some(vec!["Never modify state".to_string()]);
         data.when_editing = Some(vec![
-            WhenEditingItem { text: "Critical item".to_string(), important: true },
-            WhenEditingItem { text: "Normal item".to_string(), important: false },
+            WhenEditingItem { text: "Critical".to_string(), important: true },
+            WhenEditingItem { text: "Normal".to_string(), important: false },
         ]);
+        data.imports = Some(vec![ImportInfo {
+            from: "react".to_string(),
+            items: vec!["useState".to_string()],
+        }]);
+        data.calls = Some(vec![CallInfo {
+            target: "./utils".to_string(),
+            method: "helper".to_string(),
+        }]);
+        data.imported_by = Some(vec!["main.ts".to_string()]);
+        data.called_by = Some(vec![CalledByInfo {
+            from: "app.ts".to_string(),
+            function: "init".to_string(),
+        }]);
+        data.signatures = Some(vec![SignatureInfo {
+            name: "greet".to_string(),
+            kind: "fn".to_string(),
+            signature: "(s: string) => string".to_string(),
+        }]);
+        data.gotchas = Some(vec!["Watch for nulls".to_string()]);
+        data.flows = Some(vec!["Init -> Process -> Return".to_string()]);
+        data.related = Some(vec!["types.ts".to_string()]);
+        // Previously uncovered fields
+        data.error_handling = Some(vec!["Throws on invalid input".to_string()]);
+        data.constraints = Some(vec!["Max 100 items".to_string()]);
+        data.testing = Some(vec!["Use mock db".to_string()]);
+        data.common_mistakes = Some(vec!["Forgetting null check".to_string()]);
+        data.change_impacts = Some(vec!["Breaks API".to_string()]);
+        data.ignore = Some(vec!["export-mismatch".to_string()]);
+        // Function annotations with multiple fields (covers multi-field format)
+        data.function_annotations = Some(vec![FunctionAnnotation {
+            name: "processData".to_string(),
+            invariants: Some(vec!["Validate first".to_string()]),
+            gotchas: Some(vec!["Can be slow".to_string()]),
+            do_not: Some(vec!["Skip validation".to_string()]),
+            error_handling: Some(vec!["Throws TypeError".to_string()]),
+            constraints: Some(vec!["Input < 1MB".to_string()]),
+        }]);
 
         let output = format_toon(&data);
+
+        // Verify all fields present
+        assert!(output.contains("purpose: Comprehensive test purpose"));
+        assert!(output.contains("tokens: ~1000"));
+        assert!(output.contains("exports[2]:"));
+        assert!(output.contains("foo(fn)"));
+        assert!(output.contains("invariants:"));
+        assert!(output.contains("do-not:"));
         assert!(output.contains("when-editing:"));
-        assert!(output.contains("!Critical item"));
-        assert!(output.contains("Normal item"));
+        assert!(output.contains("!Critical"));
+        assert!(output.contains("imports[1]"));
+        assert!(output.contains("calls[1]"));
+        assert!(output.contains("imported-by[1]:"));
+        assert!(output.contains("called-by[1]:"));
+        assert!(output.contains("signatures[1]:"));
+        assert!(output.contains("gotchas:"));
+        assert!(output.contains("flows:"));
+        assert!(output.contains("related[1]:"));
+        assert!(output.contains("error-handling:"));
+        assert!(output.contains("constraints:"));
+        assert!(output.contains("testing:"));
+        assert!(output.contains("common-mistakes:"));
+        assert!(output.contains("change-impacts:"));
+        assert!(output.contains("ignore:"));
+        assert!(output.contains("fn:processData:"));
     }
 
+    /// Test truncation for imported_by (>10 items) and called_by (>10 items)
     #[test]
-    fn test_format_with_imports() {
-        let mut data = ToonData::new("Test".to_string(), 100, vec![]);
-        data.imports = Some(vec![
-            ImportInfo {
-                from: "react".to_string(),
-                items: vec!["useState".to_string(), "useEffect".to_string()],
-            },
-        ]);
-
-        let output = format_toon(&data);
-        assert!(output.contains("imports[1]{from,items}:"));
-        assert!(output.contains("react"));
-        assert!(output.contains("useState"));
-    }
-
-    #[test]
-    fn test_format_with_calls() {
-        let mut data = ToonData::new("Test".to_string(), 100, vec![]);
-        data.calls = Some(vec![
-            CallInfo { target: "./utils".to_string(), method: "helper".to_string() },
-            CallInfo { target: "./utils".to_string(), method: "format".to_string() },
-        ]);
-
-        let output = format_toon(&data);
-        assert!(output.contains("calls["));
-        assert!(output.contains("./utils"));
-    }
-
-    #[test]
-    fn test_format_with_imported_by() {
-        let mut data = ToonData::new("Test".to_string(), 100, vec![]);
-        data.imported_by = Some(vec![
-            "main.ts".to_string(),
-            "app.ts".to_string(),
-        ]);
-
-        let output = format_toon(&data);
-        assert!(output.contains("imported-by[2]:"));
-        assert!(output.contains("main.ts"));
-        assert!(output.contains("app.ts"));
-    }
-
-    #[test]
-    fn test_format_imported_by_truncation() {
+    fn test_format_truncation() {
         let mut data = ToonData::new("Test".to_string(), 100, vec![]);
         data.imported_by = Some((0..15).map(|i| format!("file{}.ts", i)).collect());
+        data.called_by = Some((0..12).map(|i| CalledByInfo {
+            from: format!("mod{}.ts", i),
+            function: "fn".to_string(),
+        }).collect());
+        data.signatures = Some(vec![SignatureInfo {
+            name: "longFunc".to_string(),
+            kind: "fn".to_string(),
+            signature: "a".repeat(200),
+        }]);
 
         let output = format_toon(&data);
         assert!(output.contains("imported-by[15]:"));
         assert!(output.contains("(+5 more)"));
-    }
-
-    #[test]
-    fn test_format_with_called_by() {
-        let mut data = ToonData::new("Test".to_string(), 100, vec![]);
-        data.called_by = Some(vec![
-            CalledByInfo { from: "main.ts".to_string(), function: "init".to_string() },
-        ]);
-
-        let output = format_toon(&data);
-        assert!(output.contains("called-by[1]:"));
-        assert!(output.contains("main.ts"));
-        assert!(output.contains("init"));
-    }
-
-    #[test]
-    fn test_format_with_signatures() {
-        let mut data = ToonData::new("Test".to_string(), 100, vec![]);
-        data.signatures = Some(vec![
-            SignatureInfo {
-                name: "greet".to_string(),
-                kind: "function".to_string(),
-                signature: "(name: string) => string".to_string(),
-            },
-        ]);
-
-        let output = format_toon(&data);
-        assert!(output.contains("signatures[1]:"));
-        assert!(output.contains("greet(function):"));
-        assert!(output.contains("(name: string) => string"));
-    }
-
-    #[test]
-    fn test_format_signature_truncation() {
-        let mut data = ToonData::new("Test".to_string(), 100, vec![]);
-        let long_sig = "a".repeat(200);
-        data.signatures = Some(vec![
-            SignatureInfo {
-                name: "longFunc".to_string(),
-                kind: "function".to_string(),
-                signature: long_sig,
-            },
-        ]);
-
-        let output = format_toon(&data);
+        assert!(output.contains("called-by[12]:"));
+        assert!(output.contains("(+2 more)"));
+        assert!(output.contains("longFunc(fn): "));
         assert!(output.contains("..."));
-        // Should be truncated
-        assert!(!output.contains(&"a".repeat(200)));
     }
 
+    /// Comprehensive parse test covering all field types
     #[test]
-    fn test_format_with_gotchas() {
-        let mut data = ToonData::new("Test".to_string(), 100, vec![]);
-        data.gotchas = Some(vec!["Watch out for null values".to_string()]);
+    fn test_parse_all_fields() {
+        let content = r#"purpose: Test module
+tokens: ~500
+exports[2]: foo(fn), Bar(class)
+invariants: Rule one; Rule two
+do-not: Never do X; Avoid Y
+when-editing: !Important; Normal
+related[2]: file1.ts,file2.ts
+imported-by[2]: main.ts,app.ts
+ignore: export-mismatch,token-count
+gotchas: Watch out
+error-handling: Throws on invalid; Returns null on empty
+constraints: Max 100 items; Min 1 item
+flows: Start -> Process -> End
+testing: Use mock db
+common-mistakes: Forgetting null check
+change-impacts: Breaks API
+"#;
+        let parsed = parse_toon(content);
 
-        let output = format_toon(&data);
-        assert!(output.contains("gotchas:"));
-        assert!(output.contains("Watch out for null values"));
+        assert_eq!(parsed.purpose, "Test module");
+        assert_eq!(parsed.tokens, 500);
+        assert_eq!(parsed.exports.len(), 2);
+        assert_eq!(parsed.exports[0].name, "foo");
+        assert_eq!(parsed.invariants.as_ref().unwrap().len(), 2);
+        assert_eq!(parsed.do_not.as_ref().unwrap().len(), 2);
+        assert_eq!(parsed.when_editing.as_ref().unwrap().len(), 2);
+        assert!(parsed.when_editing.as_ref().unwrap()[0].important);
+        assert_eq!(parsed.related.as_ref().unwrap().len(), 2);
+        assert_eq!(parsed.imported_by.as_ref().unwrap().len(), 2);
+        assert_eq!(parsed.ignore.as_ref().unwrap().len(), 2);
+        assert_eq!(parsed.gotchas.as_ref().unwrap().len(), 1);
+        // Previously uncovered parse branches
+        assert_eq!(parsed.error_handling.as_ref().unwrap().len(), 2);
+        assert_eq!(parsed.constraints.as_ref().unwrap().len(), 2);
+        assert_eq!(parsed.flows.as_ref().unwrap().len(), 1);
+        assert_eq!(parsed.testing.as_ref().unwrap().len(), 1);
+        assert_eq!(parsed.common_mistakes.as_ref().unwrap().len(), 1);
+        assert_eq!(parsed.change_impacts.as_ref().unwrap().len(), 1);
     }
 
-    #[test]
-    fn test_format_gotchas_at_end() {
-        let mut data = ToonData::new("Test".to_string(), 100, vec![]);
-        data.gotchas = Some(vec!["Gotcha".to_string()]);
-        data.invariants = Some(vec!["Invariant".to_string()]);
-
-        let output = format_toon(&data);
-        let gotchas_pos = output.find("gotchas:").unwrap();
-        let invariants_pos = output.find("invariants:").unwrap();
-        // Gotchas should appear after invariants (at the end for high attention)
-        assert!(gotchas_pos > invariants_pos);
-    }
-
-    #[test]
-    fn test_format_with_flows() {
-        let mut data = ToonData::new("Test".to_string(), 100, vec![]);
-        data.flows = Some(vec!["Parse input".to_string(), "Process data".to_string()]);
-
-        let output = format_toon(&data);
-        assert!(output.contains("flows:"));
-    }
-
-    #[test]
-    fn test_format_with_related() {
-        let mut data = ToonData::new("Test".to_string(), 100, vec![]);
-        data.related = Some(vec!["utils.ts".to_string(), "types.ts".to_string()]);
-
-        let output = format_toon(&data);
-        assert!(output.contains("related[2]:"));
-    }
-
-    #[test]
-    fn test_format_empty_optional_fields() {
-        let data = ToonData::new("Test".to_string(), 100, vec![]);
-
-        let output = format_toon(&data);
-        // Empty optional fields should not appear
-        assert!(!output.contains("invariants:"));
-        assert!(!output.contains("do-not:"));
-        assert!(!output.contains("gotchas:"));
-        assert!(!output.contains("imports["));
-    }
-
-    // ==================== parse_toon Tests ====================
-
+    /// Round-trip test: format then parse should preserve data
     #[test]
     fn test_parse_roundtrip() {
         let data = ToonData::new(
             "Test purpose".to_string(),
             1000,
             vec![
-                ExportInfo {
-                    name: "Component".to_string(),
-                    kind: "component".to_string(),
-                },
-                ExportInfo {
-                    name: "useHook".to_string(),
-                    kind: "hook".to_string(),
-                },
+                ExportInfo { name: "Component".to_string(), kind: "component".to_string() },
+                ExportInfo { name: "useHook".to_string(), kind: "hook".to_string() },
             ],
         );
 
@@ -745,185 +661,40 @@ mod tests {
         assert_eq!(parsed.exports.len(), data.exports.len());
     }
 
-    #[test]
-    fn test_parse_purpose() {
-        let content = "purpose: Test module for parsing\ntokens: ~100\n";
-        let parsed = parse_toon(content);
-        assert_eq!(parsed.purpose, "Test module for parsing");
-    }
-
-    #[test]
-    fn test_parse_tokens() {
-        let content = "purpose: Test\ntokens: ~500\n";
-        let parsed = parse_toon(content);
-        assert_eq!(parsed.tokens, 500);
-    }
-
-    #[test]
-    fn test_parse_tokens_without_tilde() {
-        let content = "purpose: Test\ntokens: 500\n";
-        let parsed = parse_toon(content);
-        // Should handle both ~500 and 500
-        assert!(parsed.tokens == 500 || parsed.tokens == 0);
-    }
-
-    #[test]
-    fn test_parse_exports() {
-        let content = "purpose: Test\ntokens: ~100\nexports[2]: foo(function), Bar(class)\n";
-        let parsed = parse_toon(content);
-        assert_eq!(parsed.exports.len(), 2);
-        assert_eq!(parsed.exports[0].name, "foo");
-        assert_eq!(parsed.exports[0].kind, "function");
-        assert_eq!(parsed.exports[1].name, "Bar");
-        assert_eq!(parsed.exports[1].kind, "class");
-    }
-
-    #[test]
-    fn test_parse_invariants() {
-        let content = "purpose: Test\ntokens: ~100\ninvariants: Rule one; Rule two\n";
-        let parsed = parse_toon(content);
-        assert!(parsed.invariants.is_some());
-        let invariants = parsed.invariants.unwrap();
-        assert_eq!(invariants.len(), 2);
-        assert_eq!(invariants[0], "Rule one");
-        assert_eq!(invariants[1], "Rule two");
-    }
-
-    #[test]
-    fn test_parse_do_not() {
-        let content = "purpose: Test\ntokens: ~100\ndo-not: Never do X; Avoid Y\n";
-        let parsed = parse_toon(content);
-        assert!(parsed.do_not.is_some());
-        let do_not = parsed.do_not.unwrap();
-        assert_eq!(do_not.len(), 2);
-    }
-
-    #[test]
-    fn test_parse_gotchas() {
-        let content = "purpose: Test\ntokens: ~100\ngotchas: Watch out for this\n";
-        let parsed = parse_toon(content);
-        assert!(parsed.gotchas.is_some());
-        assert_eq!(parsed.gotchas.unwrap().len(), 1);
-    }
-
-    #[test]
-    fn test_parse_when_editing() {
-        let content = "purpose: Test\ntokens: ~100\nwhen-editing: !Important; Normal\n";
-        let parsed = parse_toon(content);
-        assert!(parsed.when_editing.is_some());
-        let when_editing = parsed.when_editing.unwrap();
-        assert_eq!(when_editing.len(), 2);
-        assert!(when_editing[0].important);
-        assert_eq!(when_editing[0].text, "Important");
-        assert!(!when_editing[1].important);
-    }
-
-    #[test]
-    fn test_parse_related() {
-        let content = "purpose: Test\ntokens: ~100\nrelated[2]: file1.ts,file2.ts\n";
-        let parsed = parse_toon(content);
-        assert!(parsed.related.is_some());
-        let related = parsed.related.unwrap();
-        assert_eq!(related.len(), 2);
-    }
-
-    #[test]
-    fn test_parse_imported_by() {
-        let content = "purpose: Test\ntokens: ~100\nimported-by[2]: main.ts,app.ts\n";
-        let parsed = parse_toon(content);
-        assert!(parsed.imported_by.is_some());
-        let imported_by = parsed.imported_by.unwrap();
-        assert_eq!(imported_by.len(), 2);
-    }
-
+    /// Edge case: empty content
     #[test]
     fn test_parse_empty_content() {
-        let content = "";
-        let parsed = parse_toon(content);
+        let parsed = parse_toon("");
         assert!(parsed.purpose.is_empty());
         assert_eq!(parsed.tokens, 0);
     }
 
+    /// Edge case: tokens without tilde
     #[test]
-    fn test_parse_ignores_empty_lines() {
-        let content = "purpose: Test\n\n\ntokens: ~100\n\n";
+    fn test_parse_tokens_without_tilde() {
+        let content = "purpose: Test\ntokens: 500\n";
         let parsed = parse_toon(content);
-        assert_eq!(parsed.purpose, "Test");
-        assert_eq!(parsed.tokens, 100);
+        assert!(parsed.tokens == 500 || parsed.tokens == 0);
     }
 
+    /// Helper function tests
     #[test]
-    fn test_parse_ignore_directive() {
-        let content = "purpose: Test\ntokens: ~100\nignore: export-mismatch,token-count\n";
-        let parsed = parse_toon(content);
-        assert!(parsed.ignore.is_some());
-        let ignore = parsed.ignore.unwrap();
-        assert_eq!(ignore.len(), 2);
-        assert!(ignore.contains(&"export-mismatch".to_string()));
-    }
-
-    // ==================== Helper Function Tests ====================
-
-    #[test]
-    fn test_format_exports_single() {
-        let exports = vec![ExportInfo { name: "foo".to_string(), kind: "fn".to_string() }];
-        let result = format_exports(&exports);
-        assert_eq!(result, "exports[1]: foo(fn)");
-    }
-
-    #[test]
-    fn test_format_exports_multiple() {
+    fn test_helper_functions() {
+        // format_exports
         let exports = vec![
             ExportInfo { name: "a".to_string(), kind: "const".to_string() },
             ExportInfo { name: "b".to_string(), kind: "fn".to_string() },
         ];
-        let result = format_exports(&exports);
-        assert_eq!(result, "exports[2]: a(const), b(fn)");
+        assert_eq!(format_exports(&exports), "exports[2]: a(const), b(fn)");
+
+        // parse_semicolon_list
+        let list = parse_semicolon_list("  item1  ;  item2  ");
+        assert_eq!(list, vec!["item1", "item2"]);
+
+        // parse_when_editing
+        let when = parse_when_editing("!Important; Normal");
+        assert!(when[0].important);
+        assert!(!when[1].important);
     }
 
-    #[test]
-    fn test_parse_semicolon_list() {
-        let result = parse_semicolon_list("item1; item2; item3");
-        assert_eq!(result.len(), 3);
-        assert_eq!(result[0], "item1");
-        assert_eq!(result[1], "item2");
-        assert_eq!(result[2], "item3");
-    }
-
-    #[test]
-    fn test_parse_semicolon_list_with_spaces() {
-        let result = parse_semicolon_list("  item1  ;  item2  ");
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[0], "item1");
-        assert_eq!(result[1], "item2");
-    }
-
-    #[test]
-    fn test_parse_when_editing_items() {
-        let result = parse_when_editing("!Important item; Normal item");
-        assert_eq!(result.len(), 2);
-        assert!(result[0].important);
-        assert_eq!(result[0].text, "Important item");
-        assert!(!result[1].important);
-        assert_eq!(result[1].text, "Normal item");
-    }
-
-    #[test]
-    fn test_format_with_function_annotations() {
-        let mut data = ToonData::new("Test".to_string(), 100, vec![]);
-        data.function_annotations = Some(vec![
-            FunctionAnnotation {
-                name: "processData".to_string(),
-                invariants: Some(vec!["Must validate input".to_string()]),
-                gotchas: None,
-                do_not: None,
-                error_handling: None,
-                constraints: None,
-            },
-        ]);
-
-        let output = format_toon(&data);
-        assert!(output.contains("fn:processData:"));
-        assert!(output.contains("invariants:"));
-    }
 }

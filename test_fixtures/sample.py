@@ -15,7 +15,6 @@ invariants:
 
 do-not:
     - Remove any exports without updating corresponding tests
-    - Use relative imports in this fixture
 
 gotchas:
     - Python uses underscore convention for private items
@@ -26,6 +25,7 @@ from typing import Optional, List, Dict, Any, TypeVar, Generic
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
 from functools import wraps
+from collections import OrderedDict as OD  # Aliased import for parser coverage
 import asyncio
 import json
 import os

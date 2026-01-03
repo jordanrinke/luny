@@ -1,0 +1,9 @@
+purpose: toon_comment module
+tokens: ~1428
+exports[3]: parse_toon_block(fn), parse_section_header(fn), save_section(fn)
+signatures[3]:
+  parse_toon_block(fn): (content: &str) ToonCommentBlock
+  parse_section_header(fn): (line: &str) Option<&'static str>
+  save_section(fn): (block: &mut ToonCommentBlock, section: Option<&str>, items: &[String])
+imports[2]{from,items}: crate::types,ToonCommentBlock|WhenEditingItem; super::*,super::*
+calls[1]{target,methods}: crate::types,default

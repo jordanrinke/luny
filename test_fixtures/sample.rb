@@ -1,22 +1,24 @@
-# @toon
-# purpose: Sample Ruby fixture for testing the luny Ruby parser.
-#     This file contains various Ruby constructs including classes, modules,
-#     methods, and metaprogramming patterns to verify extraction works correctly.
-#
-# when-editing:
-#     - !Keep all export types represented for comprehensive testing
-#     - Maintain the mix of class and module patterns
-#
-# invariants:
-#     - All public items must have clear, testable names
-#     - Include both instance and class methods
-#
-# do-not:
-#     - Remove any exports without updating corresponding tests
-#
-# gotchas:
-#     - Ruby private methods are declared after the `private` keyword
-#     - Module methods require explicit `module_function` or `self.` prefix
+=begin
+@toon
+purpose: Sample Ruby fixture for testing the luny Ruby parser.
+    This file contains various Ruby constructs including classes, modules,
+    methods, and metaprogramming patterns to verify extraction works correctly.
+
+when-editing:
+    - !Keep all export types represented for comprehensive testing
+    - Maintain the mix of class and module patterns
+
+invariants:
+    - All public items must have clear, testable names
+    - Include both instance and class methods
+
+do-not:
+    - Remove any exports without updating corresponding tests
+
+gotchas:
+    - Ruby private methods are declared after the `private` keyword
+    - Module methods require explicit `module_function` or `self.` prefix
+=end
 
 require 'json'
 require 'fileutils'

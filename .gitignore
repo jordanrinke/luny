@@ -25,3 +25,4 @@ Thumbs.db
 
 # Generated .toon files (optional - you may want to commit these)
 # .ai/
+*.profraw

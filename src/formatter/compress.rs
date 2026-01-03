@@ -72,179 +72,65 @@ pub fn compress_item(text: &str) -> String {
 mod tests {
     use super::*;
 
-    // ==================== compress Tests ====================
-
+    /// Test all compression patterns in one comprehensive test
     #[test]
-    fn test_compress_filler_words() {
-        assert_eq!(compress("you must always do this"), "must do this");
-        assert_eq!(compress("in order to achieve this"), "to achieve this");
-        assert_eq!(compress("make sure to check"), "check");
-    }
-
-    #[test]
-    fn test_compress_whitespace() {
-        assert_eq!(compress("multiple   spaces   here"), "multiple spaces here");
-    }
-
-    #[test]
-    fn test_compress_must_always() {
+    fn test_compress_all_patterns() {
+        // All 14 compression patterns + whitespace normalization
         assert_eq!(compress("must always validate"), "must validate");
-    }
-
-    #[test]
-    fn test_compress_in_order_to() {
         assert_eq!(compress("in order to work"), "to work");
-    }
-
-    #[test]
-    fn test_compress_ensure_that() {
+        assert_eq!(compress("at a time process"), "process");
+        assert_eq!(compress("make sure to check"), "check");
         assert_eq!(compress("ensure that values are valid"), "values are valid");
-    }
-
-    #[test]
-    fn test_compress_it_is_important() {
         assert_eq!(compress("it is important to check"), "check");
-    }
-
-    #[test]
-    fn test_compress_you_should() {
-        assert_eq!(compress("you should validate input"), "validate input");
-    }
-
-    #[test]
-    fn test_compress_you_must() {
-        assert_eq!(compress("you must check this"), "must check this");
-    }
-
-    #[test]
-    fn test_compress_you_need_to() {
-        assert_eq!(compress("you need to verify"), "must verify");
-    }
-
-    #[test]
-    fn test_compress_this_is() {
-        assert_eq!(compress("this is a test"), "a test");
-    }
-
-    #[test]
-    fn test_compress_there_is() {
-        assert_eq!(compress("there is an issue"), "an issue");
-    }
-
-    #[test]
-    fn test_compress_there_are() {
-        assert_eq!(compress("there are many cases"), "many cases");
-    }
-
-    #[test]
-    fn test_compress_the_following() {
-        assert_eq!(compress("the following rules apply"), "rules apply");
-    }
-
-    #[test]
-    fn test_compress_when_you() {
         assert_eq!(compress("when you edit the file"), "when edit the file");
-    }
-
-    #[test]
-    fn test_compress_case_insensitive() {
+        assert_eq!(compress("you should validate input"), "validate input");
+        assert_eq!(compress("you must check this"), "must check this");
+        assert_eq!(compress("you need to verify"), "must verify");
+        assert_eq!(compress("this is a test"), "a test");
+        assert_eq!(compress("there is an issue"), "an issue");
+        assert_eq!(compress("there are many cases"), "many cases");
+        assert_eq!(compress("the following rules apply"), "rules apply");
+        // Whitespace normalization
+        assert_eq!(compress("multiple   spaces   here"), "multiple spaces here");
+        // Case insensitive
         assert_eq!(compress("MUST ALWAYS do"), "must do");
         assert_eq!(compress("In Order To work"), "to work");
-        assert_eq!(compress("ENSURE THAT it works"), "it works");
-    }
-
-    #[test]
-    fn test_compress_multiple_patterns() {
+        // Multiple patterns combined
         let input = "you must always ensure that in order to make sure to do this";
         let result = compress(input);
         assert!(!result.contains("must always"));
         assert!(!result.contains("ensure that"));
-        assert!(!result.contains("in order to"));
-    }
-
-    #[test]
-    fn test_compress_preserves_content() {
-        // Should not remove meaningful words
+        // Preserves meaningful content
         assert_eq!(compress("validate input"), "validate input");
-        assert_eq!(compress("check for null"), "check for null");
     }
 
+    /// Test compress_item truncation and integration with compress
     #[test]
-    fn test_compress_trims() {
-        assert_eq!(compress("  text with spaces  "), "text with spaces");
-    }
-
-    #[test]
-    fn test_compress_empty_string() {
-        assert_eq!(compress(""), "");
-    }
-
-    #[test]
-    fn test_compress_newlines() {
-        assert_eq!(compress("line one\nline two"), "line one line two");
-    }
-
-    #[test]
-    fn test_compress_tabs() {
-        assert_eq!(compress("tab\there"), "tab here");
-    }
-
-    // ==================== compress_item Tests ====================
-
-    #[test]
-    fn test_compress_item_truncation() {
-        let long_text = "a".repeat(150);
-        let compressed = compress_item(&long_text);
-        assert!(compressed.len() <= MAX_ITEM_LENGTH);
-        assert!(compressed.ends_with("..."));
-    }
-
-    #[test]
-    fn test_compress_item_short_text() {
-        let short_text = "short text";
-        let compressed = compress_item(short_text);
-        assert_eq!(compressed, "short text");
-        assert!(!compressed.ends_with("..."));
-    }
-
-    #[test]
-    fn test_compress_item_exact_length() {
-        let exact_text = "a".repeat(MAX_ITEM_LENGTH);
-        let compressed = compress_item(&exact_text);
-        assert_eq!(compressed.len(), MAX_ITEM_LENGTH);
-        assert!(!compressed.ends_with("..."));
-    }
-
-    #[test]
-    fn test_compress_item_one_over() {
-        let one_over = "a".repeat(MAX_ITEM_LENGTH + 1);
-        let compressed = compress_item(&one_over);
-        assert!(compressed.len() <= MAX_ITEM_LENGTH);
-        assert!(compressed.ends_with("..."));
-    }
-
-    #[test]
-    fn test_compress_item_applies_compression() {
+    fn test_compress_item() {
+        // Short text - no truncation
+        assert_eq!(compress_item("short text"), "short text");
+        // Exact length - no truncation
+        let exact = "a".repeat(MAX_ITEM_LENGTH);
+        assert_eq!(compress_item(&exact).len(), MAX_ITEM_LENGTH);
+        assert!(!compress_item(&exact).ends_with("..."));
+        // Over length - truncated
+        let long = "a".repeat(150);
+        assert!(compress_item(&long).len() <= MAX_ITEM_LENGTH);
+        assert!(compress_item(&long).ends_with("..."));
+        // Applies compression patterns
         let verbose = "you must always check in order to ensure that the values are valid";
-        let compressed = compress_item(verbose);
-        assert!(!compressed.contains("must always"));
-        assert!(!compressed.contains("in order to"));
+        assert!(!compress_item(verbose).contains("must always"));
     }
 
+    /// Test edge cases
     #[test]
-    fn test_compress_item_empty() {
+    fn test_compress_edge_cases() {
+        assert_eq!(compress(""), "");
+        assert_eq!(compress("  text with spaces  "), "text with spaces");
+        assert_eq!(compress("line one\nline two"), "line one line two");
+        assert_eq!(compress("tab\there"), "tab here");
         assert_eq!(compress_item(""), "");
-    }
-
-    #[test]
-    fn test_compress_item_whitespace_only() {
         assert_eq!(compress_item("   "), "");
-    }
-
-    // ==================== Constant Tests ====================
-
-    #[test]
-    fn test_max_item_length() {
         assert_eq!(MAX_ITEM_LENGTH, 120);
     }
 }

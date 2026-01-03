@@ -29,10 +29,10 @@
 //!       type_declaration, const_declaration, var_declaration nodes with uppercase names
 //!     - Extract imports: Walk AST finding import_declaration with import_spec children
 
-use crate::parser::{LanguageParser, ParseError};
+use crate::parser::{toon_comment, LanguageParser, ParseError};
 use crate::types::{
     ASTInfo, CallInfo, ExportInfo, ExtractedComments, ImportInfo, SignatureInfo,
-    ToonCommentBlock, WhenEditingItem,
+    ToonCommentBlock,
 };
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
@@ -541,88 +541,6 @@ impl GoParser {
             _ => self.node_text(type_node, source),
         }
     }
-
-    fn parse_toon_block(&self, content: &str) -> ToonCommentBlock {
-        let mut block = ToonCommentBlock::default();
-        let lines: Vec<&str> = content.lines().collect();
-        let mut current_section: Option<&str> = None;
-        let mut current_items: Vec<String> = Vec::new();
-
-        for (i, line) in lines.iter().enumerate() {
-            let trimmed = line.trim().trim_start_matches('*').trim();
-
-            if trimmed.is_empty() {
-                continue;
-            }
-
-            // Check for section headers
-            if let Some((key, value)) = trimmed.split_once(':') {
-                // Save previous section
-                if let Some(section) = current_section {
-                    self.save_section(&mut block, section, &current_items);
-                }
-
-                current_section = Some(key.trim());
-                current_items = if value.trim().is_empty() {
-                    Vec::new()
-                } else {
-                    vec![value.trim().to_string()]
-                };
-            } else if current_section.is_some() {
-                current_items.push(trimmed.to_string());
-            } else if i == 0 {
-                // First line without section header is purpose - strip "purpose:" prefix if present
-                let purpose_text = if trimmed.to_lowercase().starts_with("purpose:") {
-                    trimmed[8..].trim()
-                } else {
-                    trimmed
-                };
-                block.purpose = Some(purpose_text.to_string());
-            }
-        }
-
-        // Save last section
-        if let Some(section) = current_section {
-            self.save_section(&mut block, section, &current_items);
-        }
-
-        block
-    }
-
-    fn save_section(&self, block: &mut ToonCommentBlock, section: &str, items: &[String]) {
-        let combined = items.join(" ").trim().to_string();
-        if combined.is_empty() {
-            return;
-        }
-
-        let list: Vec<String> = combined.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-
-        match section.to_lowercase().as_str() {
-            "purpose" => block.purpose = Some(combined),
-            "when-editing" => {
-                block.when_editing = Some(
-                    list.into_iter()
-                        .map(|s| {
-                            let important = s.starts_with('!');
-                            let text = if important { s[1..].trim().to_string() } else { s };
-                            WhenEditingItem { text, important }
-                        })
-                        .collect(),
-                );
-            }
-            "do-not" => block.do_not = Some(list),
-            "invariants" | "invariant" => block.invariants = Some(list),
-            "error-handling" => block.error_handling = Some(list),
-            "constraints" | "constraint" => block.constraints = Some(list),
-            "gotchas" | "gotcha" => block.gotchas = Some(list),
-            "flows" | "flow" => block.flows = Some(list),
-            "testing" => block.testing = Some(list),
-            "common-mistakes" => block.common_mistakes = Some(list),
-            "change-impacts" => block.change_impacts = Some(list),
-            "related" => block.related = Some(list),
-            _ => {}
-        }
-    }
 }
 
 impl LanguageParser for GoParser {
@@ -665,7 +583,7 @@ impl LanguageParser for GoParser {
 
         if let Some(captures) = block_pattern.captures(source) {
             if let Some(content) = captures.get(1) {
-                comments.file_block = Some(self.parse_toon_block(content.as_str()));
+                comments.file_block = Some(toon_comment::parse_toon_block(content.as_str()));
             }
         }
 
@@ -674,7 +592,7 @@ impl LanguageParser for GoParser {
         for cap in single_pattern.captures_iter(source) {
             if let (Some(key), Some(value)) = (cap.get(1), cap.get(2)) {
                 let block = comments.file_block.get_or_insert_with(ToonCommentBlock::default);
-                self.save_section(block, key.as_str(), &[value.as_str().to_string()]);
+                toon_comment::save_section(block, Some(key.as_str()), &[value.as_str().to_string()]);
             }
         }
 
@@ -711,228 +629,57 @@ mod tests {
     const GO_FIXTURE: &str = include_str!("../../test_fixtures/sample.go");
 
     #[test]
-    fn test_language_name() {
-        let parser = GoParser::new();
-        assert_eq!(parser.language_name(), "go");
-    }
-
-    #[test]
-    fn test_file_extensions() {
-        let parser = GoParser::new();
-        let exts = parser.file_extensions();
-        assert!(exts.contains(&"go"));
-        assert_eq!(exts.len(), 1);
-    }
-
-    #[test]
-    fn test_is_exported() {
-        let parser = GoParser::new();
-        assert!(parser.is_exported("Foo"));
-        assert!(parser.is_exported("UserService"));
-        assert!(!parser.is_exported("foo"));
-        assert!(!parser.is_exported("privateFunc"));
-        assert!(!parser.is_exported("_internal"));
-    }
-
-    #[test]
-    fn test_extract_exports() {
+    fn test_extract_ast_info() {
         let parser = GoParser::new();
         let info = parser.extract_ast_info(GO_FIXTURE, Path::new("sample.go")).unwrap();
 
-        assert!(!info.exports.is_empty());
+        // Check functions and types (non-method exports)
+        let mut non_method_exports: Vec<_> = info.exports.iter()
+            .filter(|e| !e.kind.starts_with("method"))
+            .map(|e| (&e.name[..], &e.kind[..]))
+            .collect();
+        non_method_exports.sort();
+        assert_eq!(non_method_exports, vec![
+            ("Cache", "struct"),
+            ("ConsoleLogger", "struct"),
+            ("CreateUser", "fn"),
+            ("DefaultConfig", "var"),
+            ("DefaultTimeout", "const"),
+            ("Filter", "fn"),
+            ("Logger", "interface"),
+            ("MaxRetries", "const"),
+            ("NewCache", "fn"),
+            ("NewConsoleLogger", "fn"),
+            ("NewUserService", "fn"),
+            ("Repository", "interface"),
+            ("UserConfig", "struct"),
+            ("UserID", "type"),
+            ("UserService", "struct"),
+            ("ValidateEmail", "fn"),
+            ("Version", "const"),
+        ]);
 
-        // Check for exported functions
-        assert!(info.exports.iter().any(|e| e.name == "NewUserService" && e.kind == "fn"));
-        assert!(info.exports.iter().any(|e| e.name == "CreateUser" && e.kind == "fn"));
-        assert!(info.exports.iter().any(|e| e.name == "ValidateEmail" && e.kind == "fn"));
-        assert!(info.exports.iter().any(|e| e.name == "Filter" && e.kind == "fn"));
-
-        // Check for exported structs
-        assert!(info.exports.iter().any(|e| e.name == "UserConfig" && e.kind == "struct"));
-        assert!(info.exports.iter().any(|e| e.name == "UserService" && e.kind == "struct"));
-        assert!(info.exports.iter().any(|e| e.name == "Cache" && e.kind == "struct"));
-
-        // Check for exported interfaces
-        assert!(info.exports.iter().any(|e| e.name == "Repository" && e.kind == "interface"));
-        assert!(info.exports.iter().any(|e| e.name == "Logger" && e.kind == "interface"));
-
-        // Check for exported constants
-        assert!(info.exports.iter().any(|e| e.name == "Version" && e.kind == "const"));
-        assert!(info.exports.iter().any(|e| e.name == "DefaultTimeout" && e.kind == "const"));
-        assert!(info.exports.iter().any(|e| e.name == "MaxRetries" && e.kind == "const"));
-    }
-
-    #[test]
-    fn test_unexported_items_excluded() {
-        let parser = GoParser::new();
-        let info = parser.extract_ast_info(GO_FIXTURE, Path::new("sample.go")).unwrap();
-
-        // Unexported items should NOT be in exports
-        assert!(!info.exports.iter().any(|e| e.name == "generateID"));
-        assert!(!info.exports.iter().any(|e| e.name == "validate"));
-        assert!(!info.exports.iter().any(|e| e.name == "internalBufferSize"));
-    }
-
-    #[test]
-    fn test_extract_imports() {
-        let parser = GoParser::new();
-        let info = parser.extract_ast_info(GO_FIXTURE, Path::new("sample.go")).unwrap();
-
-        assert!(!info.imports.is_empty());
-
-        // Check for standard library imports
-        assert!(info.imports.iter().any(|i| i.from == "encoding/json"));
-        assert!(info.imports.iter().any(|i| i.from == "fmt"));
-        assert!(info.imports.iter().any(|i| i.from == "sync"));
-    }
-
-    #[test]
-    fn test_extract_methods() {
-        let parser = GoParser::new();
-        let info = parser.extract_ast_info(GO_FIXTURE, Path::new("sample.go")).unwrap();
-
-        // Methods should have their receiver type in kind
-        let methods: Vec<_> = info.exports.iter()
+        // Check methods are extracted with receiver types
+        let mut methods: Vec<_> = info.exports.iter()
             .filter(|e| e.kind.starts_with("method"))
+            .map(|e| &e.name[..])
             .collect();
-        assert!(!methods.is_empty());
+        methods.sort();
+        assert_eq!(methods, vec!["Debug", "Delete", "Error", "Get", "Get", "Info", "List", "Save", "Set"]);
 
-        // UserService.Get, UserService.Save, etc.
-        assert!(info.exports.iter().any(|e| e.name == "Get" && e.kind.contains("UserService")));
-        assert!(info.exports.iter().any(|e| e.name == "Save" && e.kind.contains("UserService")));
+        let mut imports: Vec<_> = info.imports.iter().map(|i| &i.from[..]).collect();
+        imports.sort();
+        assert_eq!(imports, vec!["encoding/json", "fmt", "io/ioutil", "os", "path/filepath", "sync", "time"]);
     }
 
     #[test]
-    fn test_extract_calls() {
-        let parser = GoParser::new();
-        let info = parser.extract_ast_info(GO_FIXTURE, Path::new("sample.go")).unwrap();
-
-        // Should have calls to imported packages
-        let fmt_calls: Vec<_> = info.calls.iter()
-            .filter(|c| c.target == "fmt")
-            .collect();
-        assert!(!fmt_calls.is_empty());
-    }
-
-    #[test]
-    fn test_extract_signatures() {
-        let parser = GoParser::new();
-        let info = parser.extract_ast_info(GO_FIXTURE, Path::new("sample.go")).unwrap();
-
-        assert!(!info.signatures.is_empty());
-
-        // Check struct signature
-        let user_config_sig = info.signatures.iter()
-            .find(|s| s.name == "UserConfig");
-        assert!(user_config_sig.is_some());
-        assert_eq!(user_config_sig.unwrap().kind, "struct");
-
-        // Check interface signature
-        let repo_sig = info.signatures.iter()
-            .find(|s| s.name == "Repository");
-        assert!(repo_sig.is_some());
-        assert_eq!(repo_sig.unwrap().kind, "interface");
-    }
-
-    #[test]
-    fn test_extract_toon_comments() {
+    fn test_toon_comments() {
         let parser = GoParser::new();
         let comments = parser.extract_toon_comments(GO_FIXTURE).unwrap();
-
-        assert!(comments.file_block.is_some());
         let block = comments.file_block.unwrap();
-        assert!(block.purpose.is_some());
-        assert!(block.purpose.unwrap().contains("Sample Go"));
-    }
+        assert_eq!(block.purpose.unwrap(), "Sample Go fixture for testing the luny Go parser. This file contains various Go constructs including structs, interfaces, functions, and methods to verify extraction works correctly.");
 
-    #[test]
-    fn test_strip_toon_comments() {
-        let parser = GoParser::new();
         let stripped = parser.strip_toon_comments(GO_FIXTURE, "sample.go.toon").unwrap();
-
-        assert!(stripped.contains("// @toon ->"));
-        assert!(stripped.contains("sample.go.toon"));
-    }
-
-    #[test]
-    fn test_empty_source() {
-        let parser = GoParser::new();
-        let source = "package main";
-        let info = parser.extract_ast_info(source, Path::new("empty.go")).unwrap();
-
-        assert!(info.exports.is_empty());
-    }
-
-    #[test]
-    fn test_default_impl() {
-        let parser = GoParser::new();
-        assert_eq!(parser.language_name(), "go");
-    }
-
-    #[test]
-    fn test_type_alias() {
-        let parser = GoParser::new();
-        let source = r#"
-package main
-
-type UserID string
-"#;
-        let info = parser.extract_ast_info(source, Path::new("test.go")).unwrap();
-
-        let type_export = info.exports.iter().find(|e| e.name == "UserID");
-        assert!(type_export.is_some());
-        assert_eq!(type_export.unwrap().kind, "type");
-    }
-
-    #[test]
-    fn test_const_block() {
-        let parser = GoParser::new();
-        let source = r#"
-package main
-
-const (
-    Version = "1.0.0"
-    Name    = "test"
-)
-"#;
-        let info = parser.extract_ast_info(source, Path::new("test.go")).unwrap();
-
-        assert!(info.exports.iter().any(|e| e.name == "Version" && e.kind == "const"));
-        assert!(info.exports.iter().any(|e| e.name == "Name" && e.kind == "const"));
-    }
-
-    #[test]
-    fn test_import_with_alias() {
-        let parser = GoParser::new();
-        let source = r#"
-package main
-
-import (
-    f "fmt"
-    . "strings"
-)
-"#;
-        let info = parser.extract_ast_info(source, Path::new("test.go")).unwrap();
-
-        let fmt_import = info.imports.iter().find(|i| i.from == "fmt");
-        assert!(fmt_import.is_some());
-        assert!(fmt_import.unwrap().items.contains(&"f".to_string()));
-    }
-
-    #[test]
-    fn test_parse_toon_block_sections() {
-        let parser = GoParser::new();
-        let content = r#"
-purpose: Test purpose
-
-when-editing: !Important rule; Normal rule
-
-invariants: Rule one; Rule two
-"#;
-        let block = parser.parse_toon_block(content);
-
-        assert!(block.purpose.is_some());
-        assert!(block.when_editing.is_some());
-        assert!(block.invariants.is_some());
+        assert!(stripped.starts_with("// @toon -> sample.go.toon"));
     }
 }

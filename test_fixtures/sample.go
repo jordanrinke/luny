@@ -44,6 +44,9 @@ const (
 // unexported constant
 const internalBufferSize = 1024
 
+// Exported variable (for parser coverage of var_declaration)
+var DefaultConfig *UserConfig
+
 // Exported type alias
 type UserID string
 

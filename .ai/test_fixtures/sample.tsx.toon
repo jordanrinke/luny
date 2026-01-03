@@ -12,6 +12,6 @@ signatures[7]:
 when-editing: !Maintain hook usage patterns for hook detection testing; Keep both function and arrow component styles
 invariants: Components must use proper React patterns; Hooks must follow rules of hooks
 imports[3]{from,items}: react,React|useState|useEffect|useCallback|useMemo; ./sample,UserConfig|UserService; react,ReactNode|FC
-calls[1]{target,methods}: react,useMemo|useEffect|useCallback|useState
+calls[1]{target,methods}: react,useEffect|useState|useMemo|useCallback
 imported-by[1]: test_fixtures/sample.tsx
 gotchas: TSX requires special handling for generic arrow functions; Hook detection relies on use* naming convention

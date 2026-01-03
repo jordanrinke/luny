@@ -1,19 +1,19 @@
-purpose: This module implements the generate command that creates .toon DOSE files for source code files. It uses a two-pass algorithm to build dependency graphs and generate comprehensive documentation.
+purpose: This module implements the generate command that creates .toon DOSE files
 tokens: ~8442
 exports[1]: run_generate(fn)
 signatures[1]:
   run_generate(fn): (args: &GenerateArgs, root: &Path, verbose: bool) Result<()>
 imports[12]{from,items}: crate::cli,GenerateArgs; crate::formatter,format_toon; crate::parser,ParserFactory; crate::types,CalledByInfo|ToonData; anyhow,Context|Result; std::collections,HashMap; std,fs; std::path,Path|PathBuf; walkdir,DirEntry|WalkDir; super::*,super::*; std,fs; tempfile,TempDir
-calls[7]{target,methods}: std::collections,new; walkdir,new(&full_path)
+calls[7]{target,methods}: tempfile,new().unwrap|new; walkdir,new(&full_path)
+                .follow_links(true)
+                .into_iter()
+                .filter_entry|new(&full_path)
+                .follow_links|new|new(&full_path)
+                .follow_links(true)
+                .into_iter|new(&full_path)
                 .follow_links(true)
                 .into_iter()
                 .filter_entry(|e| {
                     !is_excluded_dir(e) && is_allowed_symlink_target(e, root_canon, args.unsafe_follow)
                 })
-                .filter_map|new(&full_path)
-                .follow_links(true)
-                .into_iter()
-                .filter_entry|new(&full_path)
-                .follow_links|new(&full_path)
-                .follow_links(true)
-                .into_iter|new; std,create_dir_all(parent).context|create_dir(&target_dir).unwrap|write(temp_dir.path().join("main.ts"), "export const x = 1;").unwrap|write(node_modules.join("package.ts"), "export const x = 1;").unwrap|create_dir(&pycache_dir).unwrap|write(temp_dir.path().join("readme.md"), "# Readme").unwrap|write(git_dir.join("config.ts"), "export const x = 1;").unwrap|create_dir(&src_dir).unwrap|read_to_string(path).context|write(&toon_path, &content).context|write|write(temp_dir.path().join("main.rs"), "fn main() {}").unwrap|create_dir(&git_dir).unwrap|write(pycache_dir.join("cached.py"), "def foo(): pass").unwrap|create_dir(&ai_dir).unwrap|write(target_dir.join("debug.rs"), "fn main() {}").unwrap|write(lib_dir.join("utils.ts"), "export const y = 2;").unwrap|write(temp_dir.path().join("main.py"), "def main(): pass").unwrap|write(temp_dir.path().join("main.ts"), source).unwrap|create_dir(&node_modules).unwrap|write(temp_dir.path().join("main.ts"), "export const y = 2;").unwrap|create_dir|read_to_string(ai_dir.join("main.ts.toon")).unwrap|read_to_string|create_dir(&lib_dir).unwrap|write(src_dir.join("main.ts"), "export const x = 1;").unwrap|write(ai_dir.join("main.ts.toon"), "existing content").unwrap|read_to_string(temp_dir.path().join(".ai/main.ts.toon")).unwrap|create_dir_all|write(temp_dir.path().join("utils.py"), "def foo(): pass").unwrap|write(&main_path, "import { foo } from './utils';").unwrap|write(&utils_path, "export function foo() {}").unwrap|write(&file_path, "export const x = 1;").unwrap; crate::parser,new; std::path,new|from; crate::types,new; tempfile,new().unwrap|new
+                .filter_map; std,write(temp_dir.path().join("readme.md"), "# Readme").unwrap|write(temp_dir.path().join("main.py"), "def main(): pass").unwrap|write(temp_dir.path().join("main.ts"), "export const x = 1;").unwrap|create_dir|create_dir_all|create_dir(&lib_dir).unwrap|read_to_string(ai_dir.join("main.ts.toon")).unwrap|write(temp_dir.path().join("main.ts"), source).unwrap|read_to_string(temp_dir.path().join(".ai/main.ts.toon")).unwrap|write(lib_dir.join("utils.ts"), "export const y = 2;").unwrap|write(temp_dir.path().join("main.rs"), "fn main() {}").unwrap|read_to_string(path).context|write(src_dir.join("main.ts"), "export const x = 1;").unwrap|create_dir(&git_dir).unwrap|create_dir(&ai_dir).unwrap|create_dir(&node_modules).unwrap|write(&file_path, "export const x = 1;").unwrap|write(&utils_path, "export function foo() {}").unwrap|write(node_modules.join("package.ts"), "export const x = 1;").unwrap|write(&main_path, "import { foo } from './utils';").unwrap|write(pycache_dir.join("cached.py"), "def foo(): pass").unwrap|write(target_dir.join("debug.rs"), "fn main() {}").unwrap|write(&toon_path, &content).context|write|read_to_string|write(temp_dir.path().join("main.ts"), "export const y = 2;").unwrap|write(ai_dir.join("main.ts.toon"), "existing content").unwrap|create_dir(&src_dir).unwrap|create_dir_all(parent).context|write(git_dir.join("config.ts"), "export const x = 1;").unwrap|create_dir(&target_dir).unwrap|write(temp_dir.path().join("utils.py"), "def foo(): pass").unwrap|create_dir(&pycache_dir).unwrap; std::collections,new; std::path,new|from; crate::types,new; crate::parser,new

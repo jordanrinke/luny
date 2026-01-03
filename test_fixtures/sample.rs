@@ -41,6 +41,9 @@ pub const VERSION: &str = "1.0.0";
 pub const DEFAULT_TIMEOUT: u64 = 30;
 pub const MAX_RETRIES: u32 = 3;
 
+/// Public static (for parser coverage of static_item)
+pub static GLOBAL_COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 // Private constant
 const INTERNAL_BUFFER_SIZE: usize = 1024;
 
@@ -297,6 +300,18 @@ macro_rules! log_info {
     ($($arg:tt)*) => {
         println!("[INFO] {}", format!($($arg)*));
     };
+}
+
+/// Public module (for parser coverage of mod_item)
+pub mod utils {
+    pub fn helper() -> &'static str {
+        "helper"
+    }
+}
+
+/// Public test function (for parser coverage of test_ pattern)
+pub fn test_example_validation() -> bool {
+    true
 }
 
 #[cfg(test)]

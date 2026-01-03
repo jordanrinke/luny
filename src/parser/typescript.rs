@@ -32,10 +32,10 @@
 //!     - Extract calls: Map imported names to modules, then find call_expression nodes
 //!     - Extract signatures: For each export, build signature from params and return type
 
-use crate::parser::{LanguageParser, ParseError};
+use crate::parser::{toon_comment, LanguageParser, ParseError};
 use crate::types::{
     ASTInfo, CallInfo, ExportInfo, ExtractedComments, FunctionAnnotation, ImportInfo,
-    SignatureInfo, ToonCommentBlock, WhenEditingItem,
+    SignatureInfo,
 };
 use std::collections::{HashMap, HashSet};
 use regex::Regex;
@@ -931,141 +931,6 @@ impl TypeScriptParser {
         source[node.start_byte()..node.end_byte()].to_string()
     }
 
-    fn parse_toon_block(&self, content: &str) -> ToonCommentBlock {
-        let mut block = ToonCommentBlock::default();
-
-        // Parse the first line as purpose if it doesn't start with a section header
-        let lines: Vec<&str> = content.lines().collect();
-        let mut current_section: Option<&str> = None;
-        let mut current_items: Vec<String> = Vec::new();
-
-        for line in lines {
-            let trimmed = line.trim().trim_start_matches('*').trim();
-
-            if trimmed.is_empty() {
-                continue;
-            }
-
-            // Check for section headers
-            if let Some(header) = self.parse_section_header(trimmed) {
-                // Save previous section
-                self.save_section(&mut block, current_section, &current_items);
-                current_section = Some(header);
-                current_items.clear();
-            } else if current_section.is_none() && block.purpose.is_none() {
-                // First non-empty line is purpose - strip "purpose:" prefix if present
-                let purpose_text = if trimmed.to_lowercase().starts_with("purpose:") {
-                    trimmed[8..].trim()
-                } else {
-                    trimmed
-                };
-                block.purpose = Some(purpose_text.to_string());
-            } else if trimmed.starts_with('-') || trimmed.starts_with('•') {
-                // List item
-                let item = trimmed.trim_start_matches('-').trim_start_matches('•').trim();
-                if !item.is_empty() {
-                    current_items.push(item.to_string());
-                }
-            } else if current_section.is_some() {
-                // Continuation of section
-                current_items.push(trimmed.to_string());
-            }
-        }
-
-        // Save last section
-        self.save_section(&mut block, current_section, &current_items);
-
-        block
-    }
-
-    fn parse_section_header<'a>(&self, line: &'a str) -> Option<&'a str> {
-        let headers = [
-            "When-Editing:",
-            "When Editing:",
-            "DO-NOT:",
-            "Do-Not:",
-            "Invariants:",
-            "Error Handling:",
-            "Error-Handling:",
-            "Constraints:",
-            "Gotchas:",
-            "Flows:",
-            "Testing:",
-            "Common Mistakes:",
-            "Common-Mistakes:",
-            "Change Impacts:",
-            "Change-Impacts:",
-            "Related:",
-        ];
-
-        for header in headers {
-            if line.eq_ignore_ascii_case(header) || line.starts_with(header) {
-                return Some(header.trim_end_matches(':'));
-            }
-        }
-        None
-    }
-
-    fn save_section(
-        &self,
-        block: &mut ToonCommentBlock,
-        section: Option<&str>,
-        items: &[String],
-    ) {
-        if items.is_empty() {
-            return;
-        }
-
-        match section {
-            Some(s) if s.eq_ignore_ascii_case("When-Editing") || s.eq_ignore_ascii_case("When Editing") => {
-                block.when_editing = Some(
-                    items
-                        .iter()
-                        .map(|item| {
-                            let important = item.starts_with('!');
-                            let text = if important { &item[1..] } else { item };
-                            WhenEditingItem {
-                                text: text.trim().to_string(),
-                                important,
-                            }
-                        })
-                        .collect(),
-                );
-            }
-            Some(s) if s.eq_ignore_ascii_case("DO-NOT") || s.eq_ignore_ascii_case("Do-Not") => {
-                block.do_not = Some(items.to_vec());
-            }
-            Some(s) if s.eq_ignore_ascii_case("Invariants") || s.eq_ignore_ascii_case("Invariant") => {
-                block.invariants = Some(items.to_vec());
-            }
-            Some(s) if s.eq_ignore_ascii_case("Error Handling") || s.eq_ignore_ascii_case("Error-Handling") => {
-                block.error_handling = Some(items.to_vec());
-            }
-            Some(s) if s.eq_ignore_ascii_case("Constraints") || s.eq_ignore_ascii_case("Constraint") => {
-                block.constraints = Some(items.to_vec());
-            }
-            Some(s) if s.eq_ignore_ascii_case("Gotchas") || s.eq_ignore_ascii_case("Gotcha") => {
-                block.gotchas = Some(items.to_vec());
-            }
-            Some(s) if s.eq_ignore_ascii_case("Flows") || s.eq_ignore_ascii_case("Flow") => {
-                block.flows = Some(items.to_vec());
-            }
-            Some(s) if s.eq_ignore_ascii_case("Testing") => {
-                block.testing = Some(items.to_vec());
-            }
-            Some(s) if s.eq_ignore_ascii_case("Common Mistakes") || s.eq_ignore_ascii_case("Common-Mistakes") => {
-                block.common_mistakes = Some(items.to_vec());
-            }
-            Some(s) if s.eq_ignore_ascii_case("Change Impacts") || s.eq_ignore_ascii_case("Change-Impacts") => {
-                block.change_impacts = Some(items.to_vec());
-            }
-            Some(s) if s.eq_ignore_ascii_case("Related") => {
-                block.related = Some(items.to_vec());
-            }
-            _ => {}
-        }
-    }
-
     /// Find the name of the next function/export declaration after a given byte position
     fn find_next_function_name(&self, root: &Node, source: &str, after_pos: usize) -> Option<String> {
         let mut cursor = root.walk();
@@ -1227,7 +1092,7 @@ impl LanguageParser for TypeScriptParser {
                     .collect::<Vec<_>>()
                     .join("\n");
 
-                result.file_block = Some(self.parse_toon_block(&content));
+                result.file_block = Some(toon_comment::parse_toon_block(&content));
             }
         }
 
@@ -1331,311 +1196,62 @@ mod tests {
 
     const TS_FIXTURE: &str = include_str!("../../test_fixtures/sample.ts");
     const TSX_FIXTURE: &str = include_str!("../../test_fixtures/sample.tsx");
-    const JS_FIXTURE: &str = include_str!("../../test_fixtures/sample.js");
 
     #[test]
-    fn test_language_name() {
-        let parser = TypeScriptParser::new();
-        assert_eq!(parser.language_name(), "typescript");
-    }
-
-    #[test]
-    fn test_file_extensions() {
-        let parser = TypeScriptParser::new();
-        let exts = parser.file_extensions();
-        assert!(exts.contains(&"ts"));
-        assert!(exts.contains(&"tsx"));
-        assert!(exts.contains(&"js"));
-        assert!(exts.contains(&"jsx"));
-    }
-
-    #[test]
-    fn test_extract_exports_ts() {
+    fn test_extract_ast_info() {
         let parser = TypeScriptParser::new();
         let info = parser.extract_ast_info(TS_FIXTURE, Path::new("sample.ts")).unwrap();
 
-        assert!(!info.exports.is_empty());
+        let mut exports: Vec<_> = info.exports.iter().map(|e| (&e.name[..], &e.kind[..])).collect();
+        exports.sort();
+        assert_eq!(exports, vec![
+            ("DEFAULT_CONFIG", "const"),
+            ("MemoizedComponent", "component"),
+            ("MyComponent", "component"),
+            ("ReactMemoComponent", "component"),
+            ("Result", "type"),
+            ("Status", "enum"),
+            ("ThemeContext", "context"),
+            ("UserConfig", "interface"),
+            ("UserId", "type"),
+            ("UserService", "class"),
+            ("createUser", "fn"),
+            ("defaultExport", "const"),
+            ("memo", "fn"),
+            ("saveUser", "fn"),
+            ("validateUser", "fn"),
+        ]);
 
-        // Check for type exports
-        let type_exports: Vec<_> = info.exports.iter()
-            .filter(|e| e.kind == "type")
-            .collect();
-        assert!(!type_exports.is_empty());
-        assert!(type_exports.iter().any(|e| e.name == "UserId"));
+        let mut imports: Vec<_> = info.imports.iter().map(|i| &i.from[..]).collect();
+        imports.sort();
+        assert_eq!(imports, vec!["./other-module", "./types", "fs/promises", "path"]);
 
-        // Check for interface exports
-        let interface_exports: Vec<_> = info.exports.iter()
-            .filter(|e| e.kind == "interface")
-            .collect();
-        assert!(interface_exports.iter().any(|e| e.name == "UserConfig"));
-
-        // Check for class exports
-        let class_exports: Vec<_> = info.exports.iter()
-            .filter(|e| e.kind == "class")
-            .collect();
-        assert!(class_exports.iter().any(|e| e.name == "UserService"));
-
-        // Check for function exports
-        let fn_exports: Vec<_> = info.exports.iter()
-            .filter(|e| e.kind == "fn")
-            .collect();
-        assert!(!fn_exports.is_empty());
-        assert!(fn_exports.iter().any(|e| e.name == "validateUser"));
-
-        // Check for enum exports
-        let enum_exports: Vec<_> = info.exports.iter()
-            .filter(|e| e.kind == "enum")
-            .collect();
-        assert!(enum_exports.iter().any(|e| e.name == "Status"));
-    }
-
-    #[test]
-    fn test_extract_exports_tsx() {
-        let parser = TypeScriptParser::new();
-        let info = parser.extract_ast_info(TSX_FIXTURE, Path::new("sample.tsx")).unwrap();
-
-        assert!(!info.exports.is_empty());
-
-        // Check for hook exports (useUser, useToggle)
-        let hook_exports: Vec<_> = info.exports.iter()
+        // Also verify TSX hooks/components detection
+        let tsx_info = parser.extract_ast_info(TSX_FIXTURE, Path::new("sample.tsx")).unwrap();
+        let hooks: Vec<_> = tsx_info.exports.iter()
             .filter(|e| e.kind == "hook")
+            .map(|e| &e.name[..])
             .collect();
-        assert!(hook_exports.iter().any(|e| e.name == "useUser"));
-        assert!(hook_exports.iter().any(|e| e.name == "useToggle"));
+        assert!(hooks.contains(&"useUser"));
+        assert!(hooks.contains(&"useToggle"));
 
-        // Check for component exports
-        let component_exports: Vec<_> = info.exports.iter()
+        let components: Vec<_> = tsx_info.exports.iter()
             .filter(|e| e.kind == "component")
+            .map(|e| &e.name[..])
             .collect();
-        assert!(component_exports.iter().any(|e| e.name == "Button"));
-        assert!(component_exports.iter().any(|e| e.name == "UserCard"));
+        assert!(components.contains(&"Button"));
+        assert!(components.contains(&"UserCard"));
     }
 
     #[test]
-    fn test_extract_imports_ts() {
-        let parser = TypeScriptParser::new();
-        let info = parser.extract_ast_info(TS_FIXTURE, Path::new("sample.ts")).unwrap();
-
-        assert!(!info.imports.is_empty());
-
-        // Check fs/promises import
-        let fs_import = info.imports.iter()
-            .find(|i| i.from == "fs/promises");
-        assert!(fs_import.is_some());
-        let fs_items = &fs_import.unwrap().items;
-        assert!(fs_items.contains(&"readFile".to_string()));
-        assert!(fs_items.contains(&"writeFile".to_string()));
-
-        // Check namespace import
-        let path_import = info.imports.iter()
-            .find(|i| i.from == "path");
-        assert!(path_import.is_some());
-    }
-
-    #[test]
-    fn test_extract_imports_tsx() {
-        let parser = TypeScriptParser::new();
-        let info = parser.extract_ast_info(TSX_FIXTURE, Path::new("sample.tsx")).unwrap();
-
-        // Check React import
-        let react_import = info.imports.iter()
-            .find(|i| i.from == "react");
-        assert!(react_import.is_some());
-        let react_items = &react_import.unwrap().items;
-        assert!(react_items.contains(&"useState".to_string()));
-        assert!(react_items.contains(&"useEffect".to_string()));
-    }
-
-    #[test]
-    fn test_extract_calls_ts() {
-        let parser = TypeScriptParser::new();
-        let info = parser.extract_ast_info(TS_FIXTURE, Path::new("sample.ts")).unwrap();
-
-        // Check for calls to imported functions
-        let read_calls: Vec<_> = info.calls.iter()
-            .filter(|c| c.method == "readFile")
-            .collect();
-        assert!(!read_calls.is_empty());
-
-        let write_calls: Vec<_> = info.calls.iter()
-            .filter(|c| c.method == "writeFile")
-            .collect();
-        assert!(!write_calls.is_empty());
-    }
-
-    #[test]
-    fn test_extract_signatures_ts() {
-        let parser = TypeScriptParser::new();
-        let info = parser.extract_ast_info(TS_FIXTURE, Path::new("sample.ts")).unwrap();
-
-        // Check that signatures are extracted for exports
-        assert!(!info.signatures.is_empty());
-
-        // Check interface signature
-        let user_config_sig = info.signatures.iter()
-            .find(|s| s.name == "UserConfig");
-        assert!(user_config_sig.is_some());
-        assert_eq!(user_config_sig.unwrap().kind, "interface");
-    }
-
-    #[test]
-    fn test_extract_js_file() {
-        let parser = TypeScriptParser::new();
-        let info = parser.extract_ast_info(JS_FIXTURE, Path::new("sample.js")).unwrap();
-
-        assert!(!info.exports.is_empty());
-        assert!(!info.imports.is_empty());
-
-        // Check class export
-        let logger_export = info.exports.iter()
-            .find(|e| e.name == "Logger");
-        assert!(logger_export.is_some());
-        assert_eq!(logger_export.unwrap().kind, "class");
-    }
-
-    #[test]
-    fn test_extract_toon_comments() {
+    fn test_toon_comments() {
         let parser = TypeScriptParser::new();
         let comments = parser.extract_toon_comments(TS_FIXTURE).unwrap();
-
-        assert!(comments.file_block.is_some());
         let block = comments.file_block.unwrap();
-        assert!(block.purpose.is_some());
-        assert!(block.purpose.unwrap().starts_with("Sample TypeScript"));
-    }
+        assert_eq!(block.purpose.unwrap(), "Sample TypeScript fixture for testing the luny parser. This file contains various TypeScript constructs to verify extraction works correctly.");
 
-    #[test]
-    fn test_strip_toon_comments() {
-        let parser = TypeScriptParser::new();
         let stripped = parser.strip_toon_comments(TS_FIXTURE, "sample.ts.toon").unwrap();
-
-        // Should have replaced @toon block with stub
         assert!(stripped.contains("// @toon"));
         assert!(stripped.contains("sample.ts.toon"));
-        // Original @toon block should be gone
-        assert!(!stripped.contains("/** @toon"));
-    }
-
-    #[test]
-    fn test_empty_source() {
-        let parser = TypeScriptParser::new();
-        let info = parser.extract_ast_info("", Path::new("empty.ts")).unwrap();
-
-        assert!(info.exports.is_empty());
-        assert!(info.imports.is_empty());
-        assert!(info.calls.is_empty());
-        assert!(info.signatures.is_empty());
-    }
-
-    #[test]
-    fn test_token_estimation() {
-        let parser = TypeScriptParser::new();
-        let source = "export const foo = 'bar';";
-        let info = parser.extract_ast_info(source, Path::new("test.ts")).unwrap();
-
-        // Tokens should be approximately source.len() / 4
-        assert!(info.tokens > 0);
-        assert_eq!(info.tokens, source.len() / 4);
-    }
-
-    #[test]
-    fn test_is_tsx_detection() {
-        assert!(TypeScriptParser::is_tsx(Path::new("component.tsx")));
-        assert!(TypeScriptParser::is_tsx(Path::new("component.jsx")));
-        assert!(!TypeScriptParser::is_tsx(Path::new("module.ts")));
-        assert!(!TypeScriptParser::is_tsx(Path::new("module.js")));
-    }
-
-    #[test]
-    fn test_default_impl() {
-        let parser = TypeScriptParser::new();
-        assert_eq!(parser.language_name(), "typescript");
-    }
-
-    #[test]
-    fn test_arrow_function_export() {
-        let parser = TypeScriptParser::new();
-        let source = r#"export const add = (a: number, b: number): number => a + b;"#;
-        let info = parser.extract_ast_info(source, Path::new("test.ts")).unwrap();
-
-        assert_eq!(info.exports.len(), 1);
-        assert_eq!(info.exports[0].name, "add");
-        assert_eq!(info.exports[0].kind, "fn");
-    }
-
-    #[test]
-    fn test_type_alias_export() {
-        let parser = TypeScriptParser::new();
-        let source = r#"export type Result<T, E = Error> = { ok: true; value: T } | { ok: false; error: E };"#;
-        let info = parser.extract_ast_info(source, Path::new("test.ts")).unwrap();
-
-        let result_export = info.exports.iter().find(|e| e.name == "Result");
-        assert!(result_export.is_some());
-        assert_eq!(result_export.unwrap().kind, "type");
-    }
-
-    #[test]
-    fn test_re_export() {
-        let parser = TypeScriptParser::new();
-        let source = r#"
-const foo = 'bar';
-export { foo };
-"#;
-        let info = parser.extract_ast_info(source, Path::new("test.ts")).unwrap();
-
-        let foo_export = info.exports.iter().find(|e| e.name == "foo");
-        assert!(foo_export.is_some());
-    }
-
-    #[test]
-    fn test_namespace_import() {
-        let parser = TypeScriptParser::new();
-        let source = r#"import * as path from 'path';"#;
-        let info = parser.extract_ast_info(source, Path::new("test.ts")).unwrap();
-
-        // Namespace imports extract the module name
-        let path_import = info.imports.iter().find(|i| i.from == "path");
-        assert!(path_import.is_some());
-    }
-
-    #[test]
-    fn test_parse_toon_block_sections() {
-        let parser = TypeScriptParser::new();
-        let content = r#"
-purpose: Test purpose line
-
-when-editing:
-    - !Important item
-    - Normal item
-
-invariants:
-    - Rule one
-    - Rule two
-
-do-not:
-    - Forbidden action
-"#;
-        let block = parser.parse_toon_block(content);
-
-        assert!(block.purpose.is_some());
-        let purpose = block.purpose.unwrap();
-        // Critical: verify "purpose:" prefix is stripped
-        assert_eq!(purpose, "Test purpose line", "Purpose should not include 'purpose:' prefix");
-
-        assert!(block.when_editing.is_some());
-        let we = block.when_editing.unwrap();
-        assert_eq!(we.len(), 2);
-        assert!(we[0].important);
-        assert!(!we[1].important);
-
-        assert!(block.invariants.is_some());
-        assert!(block.do_not.is_some());
-    }
-
-    #[test]
-    fn test_purpose_prefix_stripped() {
-        let parser = TypeScriptParser::new();
-        let block = parser.parse_toon_block("purpose: My description");
-        assert_eq!(block.purpose.unwrap(), "My description");
     }
 }

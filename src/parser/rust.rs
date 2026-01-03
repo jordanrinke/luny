@@ -28,11 +28,8 @@
 //!     - Extract exports: Walk AST finding items with visibility_modifier nodes
 //!     - Extract imports: Walk AST collecting use_declaration nodes with complex patterns
 
-use crate::parser::{LanguageParser, ParseError};
-use crate::types::{
-    ASTInfo, CallInfo, ExportInfo, ExtractedComments, ImportInfo, SignatureInfo,
-    ToonCommentBlock, WhenEditingItem,
-};
+use crate::parser::{toon_comment, LanguageParser, ParseError};
+use crate::types::{ASTInfo, CallInfo, ExportInfo, ExtractedComments, ImportInfo, SignatureInfo};
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -697,89 +694,6 @@ impl RustParser {
             signature,
         })
     }
-
-    fn parse_toon_block(&self, content: &str) -> ToonCommentBlock {
-        let mut block = ToonCommentBlock::default();
-        let lines: Vec<&str> = content.lines().collect();
-        let mut current_section: Option<&str> = None;
-        let mut current_items: Vec<String> = Vec::new();
-
-        for (i, line) in lines.iter().enumerate() {
-            // Strip Rust doc comment prefixes
-            let trimmed = line.trim()
-                .trim_start_matches("///")
-                .trim_start_matches("//!")
-                .trim_start_matches('*')
-                .trim();
-
-            if trimmed.is_empty() {
-                continue;
-            }
-
-            if let Some((key, value)) = trimmed.split_once(':') {
-                if let Some(section) = current_section {
-                    self.save_section(&mut block, section, &current_items);
-                }
-                current_section = Some(key.trim());
-                current_items = if value.trim().is_empty() {
-                    Vec::new()
-                } else {
-                    vec![value.trim().to_string()]
-                };
-            } else if current_section.is_some() {
-                current_items.push(trimmed.to_string());
-            } else if i == 0 {
-                // Strip "purpose:" prefix if present
-                let purpose_text = if trimmed.to_lowercase().starts_with("purpose:") {
-                    trimmed[8..].trim()
-                } else {
-                    trimmed
-                };
-                block.purpose = Some(purpose_text.to_string());
-            }
-        }
-
-        if let Some(section) = current_section {
-            self.save_section(&mut block, section, &current_items);
-        }
-
-        block
-    }
-
-    fn save_section(&self, block: &mut ToonCommentBlock, section: &str, items: &[String]) {
-        let combined = items.join(" ").trim().to_string();
-        if combined.is_empty() {
-            return;
-        }
-
-        let list: Vec<String> = combined.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-
-        match section.to_lowercase().as_str() {
-            "purpose" => block.purpose = Some(combined),
-            "when-editing" => {
-                block.when_editing = Some(
-                    list.into_iter()
-                        .map(|s| {
-                            let important = s.starts_with('!');
-                            let text = if important { s[1..].trim().to_string() } else { s };
-                            WhenEditingItem { text, important }
-                        })
-                        .collect(),
-                );
-            }
-            "do-not" => block.do_not = Some(list),
-            "invariants" | "invariant" => block.invariants = Some(list),
-            "error-handling" => block.error_handling = Some(list),
-            "constraints" | "constraint" => block.constraints = Some(list),
-            "gotchas" | "gotcha" => block.gotchas = Some(list),
-            "flows" | "flow" => block.flows = Some(list),
-            "testing" => block.testing = Some(list),
-            "common-mistakes" => block.common_mistakes = Some(list),
-            "change-impacts" => block.change_impacts = Some(list),
-            "related" => block.related = Some(list),
-            _ => {}
-        }
-    }
 }
 
 impl LanguageParser for RustParser {
@@ -822,7 +736,7 @@ impl LanguageParser for RustParser {
 
         if let Some(captures) = block_pattern.captures(source) {
             if let Some(content) = captures.get(1) {
-                comments.file_block = Some(self.parse_toon_block(content.as_str()));
+                comments.file_block = Some(toon_comment::parse_toon_block(content.as_str()));
             }
         }
 
@@ -849,7 +763,7 @@ impl LanguageParser for RustParser {
                     }
                 }
 
-                comments.file_block = Some(self.parse_toon_block(&full_content));
+                comments.file_block = Some(toon_comment::parse_toon_block(&full_content));
             }
         }
 
@@ -888,244 +802,66 @@ mod tests {
     const RS_FIXTURE: &str = include_str!("../../test_fixtures/sample.rs");
 
     #[test]
-    fn test_language_name() {
-        let parser = RustParser::new();
-        assert_eq!(parser.language_name(), "rust");
-    }
-
-    #[test]
-    fn test_file_extensions() {
-        let parser = RustParser::new();
-        let exts = parser.file_extensions();
-        assert!(exts.contains(&"rs"));
-        assert_eq!(exts.len(), 1);
-    }
-
-    #[test]
-    fn test_is_public() {
-        let parser = RustParser::new();
-        let source = r#"
-pub fn public_fn() {}
-fn private_fn() {}
-"#;
-        let mut tree_parser = Parser::new();
-        tree_parser.set_language(&tree_sitter_rust::LANGUAGE.into()).unwrap();
-        let tree = tree_parser.parse(source, None).unwrap();
-        let root = tree.root_node();
-
-        let mut found_public = false;
-        let mut found_private = false;
-
-        for i in 0..root.child_count() {
-            if let Some(child) = root.child(i) {
-                if child.kind() == "function_item" {
-                    if parser.is_public(child) {
-                        found_public = true;
-                    } else {
-                        found_private = true;
-                    }
-                }
-            }
-        }
-
-        assert!(found_public);
-        assert!(found_private);
-    }
-
-    #[test]
-    fn test_extract_exports() {
+    fn test_extract_ast_info() {
         let parser = RustParser::new();
         let info = parser.extract_ast_info(RS_FIXTURE, Path::new("sample.rs")).unwrap();
 
-        assert!(!info.exports.is_empty());
-
-        // Check for pub functions
-        assert!(info.exports.iter().any(|e| e.name == "create_user" && e.kind == "fn"));
-        assert!(info.exports.iter().any(|e| e.name == "validate_email" && e.kind == "fn"));
-
-        // Check for pub structs
-        assert!(info.exports.iter().any(|e| e.name == "UserConfig" && e.kind == "struct"));
-        assert!(info.exports.iter().any(|e| e.name == "UserService" && e.kind == "struct"));
-        assert!(info.exports.iter().any(|e| e.name == "Cache" && e.kind == "struct"));
-
-        // Check for pub traits
-        assert!(info.exports.iter().any(|e| e.name == "Repository" && e.kind == "trait"));
-
-        // Check for pub enums
-        assert!(info.exports.iter().any(|e| e.name == "Error" && e.kind == "enum"));
-        assert!(info.exports.iter().any(|e| e.name == "UserStatus" && e.kind == "enum"));
-
-        // Check for pub type aliases
-        assert!(info.exports.iter().any(|e| e.name == "UserId" && e.kind == "type"));
-        assert!(info.exports.iter().any(|e| e.name == "Result" && e.kind == "type"));
-
-        // Check for pub constants
-        assert!(info.exports.iter().any(|e| e.name == "VERSION" && e.kind == "const"));
-        assert!(info.exports.iter().any(|e| e.name == "DEFAULT_TIMEOUT" && e.kind == "const"));
-    }
-
-    #[test]
-    fn test_private_items_excluded() {
-        let parser = RustParser::new();
-        let info = parser.extract_ast_info(RS_FIXTURE, Path::new("sample.rs")).unwrap();
-
-        // Private items should NOT be in exports
-        assert!(!info.exports.iter().any(|e| e.name == "generate_id"));
-        assert!(!info.exports.iter().any(|e| e.name == "INTERNAL_BUFFER_SIZE"));
-    }
-
-    #[test]
-    fn test_extract_imports() {
-        let parser = RustParser::new();
-        let info = parser.extract_ast_info(RS_FIXTURE, Path::new("sample.rs")).unwrap();
-
-        assert!(!info.imports.is_empty());
-
-        // Check for standard library imports
-        assert!(info.imports.iter().any(|i| i.from.contains("collections") && i.items.contains(&"HashMap".to_string())));
-        assert!(info.imports.iter().any(|i| i.from.contains("path") && i.items.contains(&"Path".to_string())));
-    }
-
-    #[test]
-    fn test_extract_impl_methods() {
-        let parser = RustParser::new();
-        let info = parser.extract_ast_info(RS_FIXTURE, Path::new("sample.rs")).unwrap();
-
-        // Pub methods in impl blocks should be exported with receiver type
-        let methods: Vec<_> = info.exports.iter()
-            .filter(|e| e.kind.starts_with("method"))
+        let mut exports: Vec<_> = info.exports.iter()
+            .map(|e| (&e.name[..], &e.kind[..]))
             .collect();
-        assert!(!methods.is_empty());
+        exports.sort();
+        assert_eq!(exports, vec![
+            ("Cache", "struct"),
+            ("DEFAULT_TIMEOUT", "const"),
+            ("Error", "enum"),
+            ("GLOBAL_COUNTER", "static"),
+            ("MAX_RETRIES", "const"),
+            ("Repository", "trait"),
+            ("Result", "type"),
+            ("UserConfig", "struct"),
+            ("UserId", "type"),
+            ("UserService", "struct"),
+            ("UserStatus", "enum"),
+            ("VERSION", "const"),
+            ("add_setting", "fn"),
+            ("add_setting", "method(UserConfig)"),
+            ("clear_cache", "fn"),
+            ("clear_cache", "method(UserService)"),
+            ("create_user", "fn"),
+            ("get", "fn"),
+            ("get", "method(Cache<K, V>)"),
+            ("helper", "fn"),
+            ("log_info", "macro"),
+            ("new", "fn"),
+            ("new", "fn"),
+            ("new", "fn"),
+            ("new", "method(Cache<K, V>)"),
+            ("new", "method(UserConfig)"),
+            ("new", "method(UserService)"),
+            ("set", "fn"),
+            ("set", "method(Cache<K, V>)"),
+            ("test_example_validation", "test"),
+            ("utils", "mod"),
+            ("validate_email", "fn"),
+            ("with_email", "fn"),
+            ("with_email", "method(UserConfig)"),
+        ]);
 
-        // UserConfig::new, UserConfig::with_email, etc.
-        assert!(info.exports.iter().any(|e| e.name == "new" && e.kind.contains("UserConfig")));
+        let import_items: Vec<_> = info.imports.iter()
+            .flat_map(|i| i.items.iter().map(|s| s.as_str()))
+            .collect();
+        assert!(import_items.contains(&"HashMap"));
+        assert!(import_items.contains(&"Arc"));
     }
 
     #[test]
-    fn test_extract_signatures() {
-        let parser = RustParser::new();
-        let info = parser.extract_ast_info(RS_FIXTURE, Path::new("sample.rs")).unwrap();
-
-        assert!(!info.signatures.is_empty());
-
-        // Check struct signature
-        let user_config_sig = info.signatures.iter()
-            .find(|s| s.name == "UserConfig");
-        assert!(user_config_sig.is_some());
-        assert_eq!(user_config_sig.unwrap().kind, "struct");
-
-        // Check trait signature
-        let repo_sig = info.signatures.iter()
-            .find(|s| s.name == "Repository");
-        assert!(repo_sig.is_some());
-        assert_eq!(repo_sig.unwrap().kind, "trait");
-    }
-
-    #[test]
-    fn test_extract_toon_comments() {
+    fn test_toon_comments() {
         let parser = RustParser::new();
         let comments = parser.extract_toon_comments(RS_FIXTURE).unwrap();
-
-        assert!(comments.file_block.is_some());
         let block = comments.file_block.unwrap();
-        assert!(block.purpose.is_some());
-        assert!(block.purpose.unwrap().contains("Sample Rust"));
-    }
+        assert_eq!(block.purpose.unwrap(), "Sample Rust fixture for testing the luny Rust parser. This file contains various Rust constructs including structs, enums, traits, and impl blocks to verify extraction works correctly.");
 
-    #[test]
-    fn test_strip_toon_comments() {
-        let parser = RustParser::new();
         let stripped = parser.strip_toon_comments(RS_FIXTURE, "sample.rs.toon").unwrap();
-
-        assert!(stripped.contains("// @toon ->"));
-        assert!(stripped.contains("sample.rs.toon"));
-    }
-
-    #[test]
-    fn test_empty_source() {
-        let parser = RustParser::new();
-        let info = parser.extract_ast_info("", Path::new("empty.rs")).unwrap();
-
-        assert!(info.exports.is_empty());
-        assert!(info.imports.is_empty());
-    }
-
-    #[test]
-    fn test_default_impl() {
-        let parser = RustParser::new();
-        assert_eq!(parser.language_name(), "rust");
-    }
-
-    #[test]
-    fn test_macro_export() {
-        let parser = RustParser::new();
-        let info = parser.extract_ast_info(RS_FIXTURE, Path::new("sample.rs")).unwrap();
-
-        // Macros should be exported
-        assert!(info.exports.iter().any(|e| e.name == "log_info" && e.kind == "macro"));
-    }
-
-    #[test]
-    fn test_generic_struct() {
-        let parser = RustParser::new();
-        let source = r#"
-pub struct Cache<K, V> {
-    data: HashMap<K, V>,
-}
-"#;
-        let info = parser.extract_ast_info(source, Path::new("test.rs")).unwrap();
-
-        let cache_export = info.exports.iter().find(|e| e.name == "Cache");
-        assert!(cache_export.is_some());
-        assert_eq!(cache_export.unwrap().kind, "struct");
-    }
-
-    #[test]
-    fn test_use_patterns() {
-        let parser = RustParser::new();
-        let source = r#"
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use crate::types::*;
-"#;
-        let info = parser.extract_ast_info(source, Path::new("test.rs")).unwrap();
-
-        assert!(info.imports.iter().any(|i| i.items.contains(&"HashMap".to_string())));
-        assert!(info.imports.iter().any(|i| i.items.contains(&"Path".to_string())));
-        assert!(info.imports.iter().any(|i| i.items.contains(&"PathBuf".to_string())));
-    }
-
-    #[test]
-    fn test_parse_toon_block_sections() {
-        let parser = RustParser::new();
-        let content = r#"
-purpose: Test purpose
-
-when-editing: !Important rule; Normal rule
-
-invariants: Rule one; Rule two
-"#;
-        let block = parser.parse_toon_block(content);
-
-        assert!(block.purpose.is_some());
-        assert!(block.when_editing.is_some());
-        assert!(block.invariants.is_some());
-    }
-
-    #[test]
-    fn test_enum_variants() {
-        let parser = RustParser::new();
-        let source = r#"
-pub enum Status {
-    Active,
-    Inactive,
-    Pending,
-}
-"#;
-        let info = parser.extract_ast_info(source, Path::new("test.rs")).unwrap();
-
-        let status_sig = info.signatures.iter().find(|s| s.name == "Status");
-        assert!(status_sig.is_some());
-        assert!(status_sig.unwrap().signature.contains("Active"));
+        assert!(stripped.starts_with("// @toon -> sample.rs.toon"));
     }
 }

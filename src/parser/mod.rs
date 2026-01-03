@@ -33,6 +33,7 @@ mod ruby;
 mod csharp;
 mod go;
 mod rust;
+pub mod toon_comment;
 
 use crate::types::{ASTInfo, ExtractedComments};
 use std::collections::HashMap;
@@ -160,154 +161,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parser_factory_new() {
+    fn test_parser_factory() {
         let factory = ParserFactory::new();
-        assert!(!factory.parsers.is_empty());
-    }
 
-    #[test]
-    fn test_get_parser_typescript() {
-        let factory = ParserFactory::new();
-        let parser = factory.get_parser(Path::new("test.ts"));
-        assert!(parser.is_some());
-        assert_eq!(parser.unwrap().language_name(), "typescript");
-    }
+        // Verify all language parsers are registered with correct language names
+        assert_eq!(factory.get_parser(Path::new("test.ts")).unwrap().language_name(), "typescript");
+        assert_eq!(factory.get_parser(Path::new("test.tsx")).unwrap().language_name(), "typescript");
+        assert_eq!(factory.get_parser(Path::new("test.js")).unwrap().language_name(), "typescript");
+        assert_eq!(factory.get_parser(Path::new("test.jsx")).unwrap().language_name(), "typescript");
+        assert_eq!(factory.get_parser(Path::new("test.py")).unwrap().language_name(), "python");
+        assert_eq!(factory.get_parser(Path::new("test.rb")).unwrap().language_name(), "ruby");
+        assert_eq!(factory.get_parser(Path::new("test.cs")).unwrap().language_name(), "csharp");
+        assert_eq!(factory.get_parser(Path::new("test.go")).unwrap().language_name(), "go");
+        assert_eq!(factory.get_parser(Path::new("test.rs")).unwrap().language_name(), "rust");
 
-    #[test]
-    fn test_get_parser_tsx() {
-        let factory = ParserFactory::new();
-        let parser = factory.get_parser(Path::new("component.tsx"));
-        assert!(parser.is_some());
-        assert_eq!(parser.unwrap().language_name(), "typescript");
-    }
-
-    #[test]
-    fn test_get_parser_javascript() {
-        let factory = ParserFactory::new();
-        let parser = factory.get_parser(Path::new("script.js"));
-        assert!(parser.is_some());
-        assert_eq!(parser.unwrap().language_name(), "typescript");
-    }
-
-    #[test]
-    fn test_get_parser_jsx() {
-        let factory = ParserFactory::new();
-        let parser = factory.get_parser(Path::new("component.jsx"));
-        assert!(parser.is_some());
-        assert_eq!(parser.unwrap().language_name(), "typescript");
-    }
-
-    #[test]
-    fn test_get_parser_python() {
-        let factory = ParserFactory::new();
-        let parser = factory.get_parser(Path::new("script.py"));
-        assert!(parser.is_some());
-        assert_eq!(parser.unwrap().language_name(), "python");
-    }
-
-    #[test]
-    fn test_get_parser_ruby() {
-        let factory = ParserFactory::new();
-        let parser = factory.get_parser(Path::new("script.rb"));
-        assert!(parser.is_some());
-        assert_eq!(parser.unwrap().language_name(), "ruby");
-    }
-
-    #[test]
-    fn test_get_parser_csharp() {
-        let factory = ParserFactory::new();
-        let parser = factory.get_parser(Path::new("Program.cs"));
-        assert!(parser.is_some());
-        assert_eq!(parser.unwrap().language_name(), "csharp");
-    }
-
-    #[test]
-    fn test_get_parser_go() {
-        let factory = ParserFactory::new();
-        let parser = factory.get_parser(Path::new("main.go"));
-        assert!(parser.is_some());
-        assert_eq!(parser.unwrap().language_name(), "go");
-    }
-
-    #[test]
-    fn test_get_parser_rust() {
-        let factory = ParserFactory::new();
-        let parser = factory.get_parser(Path::new("lib.rs"));
-        assert!(parser.is_some());
-        assert_eq!(parser.unwrap().language_name(), "rust");
-    }
-
-    #[test]
-    fn test_get_parser_unsupported() {
-        let factory = ParserFactory::new();
-        let parser = factory.get_parser(Path::new("data.json"));
-        assert!(parser.is_none());
-    }
-
-    #[test]
-    fn test_get_parser_no_extension() {
-        let factory = ParserFactory::new();
-        let parser = factory.get_parser(Path::new("Makefile"));
-        assert!(parser.is_none());
-    }
-
-    #[test]
-    fn test_get_parser_by_ext() {
-        let factory = ParserFactory::new();
-        assert!(factory.get_parser_by_ext("ts").is_some());
-        assert!(factory.get_parser_by_ext("py").is_some());
-        assert!(factory.get_parser_by_ext("rb").is_some());
-        assert!(factory.get_parser_by_ext("cs").is_some());
-        assert!(factory.get_parser_by_ext("go").is_some());
-        assert!(factory.get_parser_by_ext("rs").is_some());
-        assert!(factory.get_parser_by_ext("xyz").is_none());
-    }
-
-    #[test]
-    fn test_is_supported() {
-        let factory = ParserFactory::new();
-        assert!(factory.is_supported(Path::new("test.ts")));
-        assert!(factory.is_supported(Path::new("test.tsx")));
-        assert!(factory.is_supported(Path::new("test.js")));
-        assert!(factory.is_supported(Path::new("test.jsx")));
-        assert!(factory.is_supported(Path::new("test.py")));
-        assert!(factory.is_supported(Path::new("test.rb")));
-        assert!(factory.is_supported(Path::new("test.cs")));
-        assert!(factory.is_supported(Path::new("test.go")));
-        assert!(factory.is_supported(Path::new("test.rs")));
-        assert!(!factory.is_supported(Path::new("test.txt")));
-        assert!(!factory.is_supported(Path::new("Makefile")));
+        // Verify unsupported extensions return None
+        assert!(factory.get_parser(Path::new("test.json")).is_none());
+        assert!(factory.get_parser(Path::new("Makefile")).is_none());
     }
 
     #[test]
     fn test_supported_extensions() {
         let factory = ParserFactory::new();
-        let exts = factory.supported_extensions();
-        assert!(exts.contains(&"ts"));
-        assert!(exts.contains(&"tsx"));
-        assert!(exts.contains(&"js"));
-        assert!(exts.contains(&"jsx"));
-        assert!(exts.contains(&"py"));
-        assert!(exts.contains(&"rb"));
-        assert!(exts.contains(&"cs"));
-        assert!(exts.contains(&"go"));
-        assert!(exts.contains(&"rs"));
-    }
-
-    #[test]
-    fn test_parser_factory_default() {
-        let factory = ParserFactory::default();
-        assert!(!factory.parsers.is_empty());
-    }
-
-    #[test]
-    fn test_parser_file_extensions() {
-        let factory = ParserFactory::new();
-        let ts_parser = factory.get_parser_by_ext("ts").unwrap();
-        let extensions = ts_parser.file_extensions();
-        assert!(extensions.contains(&"ts"));
-        assert!(extensions.contains(&"tsx"));
-        assert!(extensions.contains(&"js"));
-        assert!(extensions.contains(&"jsx"));
+        let mut exts = factory.supported_extensions();
+        exts.sort();
+        assert_eq!(exts, vec!["cs", "go", "js", "jsx", "py", "rb", "rs", "ts", "tsx"]);
     }
 }

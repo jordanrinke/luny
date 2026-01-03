@@ -85,3 +85,67 @@ export { defaultExport };
 
 // Default export
 export default UserService;
+
+// === Non-exported items (for internal use, tests collect_definitions) ===
+
+// Non-exported function
+function helperFunction(x: number): number {
+    return x * 2;
+}
+
+// Non-exported hook (useXxx pattern)
+function useInternalState(): [number, (n: number) => void] {
+    let state = 0;
+    return [state, (n) => { state = n; }];
+}
+
+// Non-exported const
+const INTERNAL_CONSTANT = 'internal';
+
+// Non-exported class
+class InternalHelper {
+    private value: number = 0;
+    getValue(): number { return this.value; }
+}
+
+// Non-exported type
+type InternalId = number;
+
+// Non-exported interface
+interface InternalConfig {
+    debug: boolean;
+}
+
+// Non-exported enum
+enum InternalStatus {
+    Ready = 'ready',
+    Busy = 'busy',
+}
+
+// === React-like patterns (for parser coverage of component detection) ===
+
+// Simulated React types for parser testing
+type FC<P = {}> = (props: P) => JSX.Element;
+type FunctionComponent<P = {}> = FC<P>;
+declare namespace JSX { interface Element {} }
+declare function createContext<T>(defaultValue: T): { Provider: FC<{value: T}> };
+declare function memo<T extends FC<any>>(component: T): T;
+declare namespace React { export function memo<T extends FC<any>>(component: T): T; }
+
+// Component with FC type annotation (covers is_react_component_type)
+export const MyComponent: FC<{ name: string }> = ({ name }) => {
+    return <div>{name}</div>;
+};
+
+// Context creation (covers infer_kind_from_call with createContext)
+export const ThemeContext = createContext({ dark: false });
+
+// Memo call (covers infer_kind_from_call with memo)
+export const MemoizedComponent = memo(({ value }: { value: string }) => {
+    return <span>{value}</span>;
+});
+
+// React.memo call (covers member_expression branch in infer_kind_from_call)
+export const ReactMemoComponent = React.memo(({ count }: { count: number }) => {
+    return <div>{count}</div>;
+});
