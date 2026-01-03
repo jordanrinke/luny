@@ -11,4 +11,4 @@ signatures[8]:
   is_supported(fn): (&self, file_path: &Path) bool
   supported_extensions(fn): (&self) Vec<&str>
 imports[12]{from,items}: crate::types,ASTInfo|ExtractedComments; std::collections,HashMap; std::path,Path; std::sync,Arc; thiserror,Error; csharp,CSharpParser; go,GoParser; python,PythonParser; ruby,RubyParser; rust,RustParser; typescript,TypeScriptParser; super::*,super::*
-calls[8]{target,methods}: csharp,new; go,new; ruby,new; rust,new; typescript,new; std::sync,new|clone; python,new; std::collections,new
+calls[8]{target,methods}: python,new; std::collections,new; ruby,new; csharp,new; rust,new; go,new; typescript,new; std::sync,clone|new

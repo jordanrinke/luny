@@ -1,6 +1,6 @@
 [package]
 name = "luny"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.85"
 description = "Multi-language TOON DOSE generator for AI-friendly codebase documentation"
@@ -50,6 +50,9 @@ tiktoken-rs = "0.6"
 
 # Configuration
 toml = "0.8"
+
+# File watching
+notify = "8"
 
 [dev-dependencies]
 tempfile = "3.24.0"

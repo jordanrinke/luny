@@ -1,0 +1,9 @@
+purpose: Implements the watch command that monitors source files for changes and incrementally regenerates affected .toon files using the dependency graph.
+tokens: ~4149
+exports[1]: run_watch(fn)
+signatures[1]:
+  run_watch(fn): (args: &WatchArgs, root: &Path, verbose: bool) Result<()>
+imports[16]{from,items}: crate::cli,GenerateArgs|WatchArgs; crate::commands,run_generate; crate::config,Config; crate::dependency,get_path_variants|normalize_separators|resolve_import_path|DependencyGraph; crate::exclusion,build_walker; crate::formatter,format_toon; crate::parser,ParserFactory; crate::types,CalledByInfo|ToonData; anyhow,Context|Result; notify,Event|EventKind|RecommendedWatcher|RecursiveMode|Watcher; std::collections,HashMap|HashSet; std,fs; std::path,Path|PathBuf; std::sync,mpsc; std::time,Duration|Instant; std::time,SystemTime
+calls[9]{target,methods}: crate::parser,new; std::sync,channel; crate::types,new; std,remove_file|create_dir_all(parent).context|read_to_string|read_to_string(path).context|create_dir_all|write(&toon_path, &content).context|write; crate::dependency,new; notify,new; std::collections,new; std::time,from_millis|now()
+        .duration_since|now|UNIX_EPOCH)
+        .unwrap_or_default; crate::config,load
