@@ -1,4 +1,4 @@
-//! @toon
+//! @dose
 //! purpose: This module serves as the central hub for all language parsers in luny.
 //!     It defines the LanguageParser trait that all parsers must implement and provides
 //!     the ParserFactory for creating and retrieving language-specific parsers based on
@@ -32,6 +32,7 @@ mod go;
 mod python;
 mod ruby;
 mod rust;
+mod tokens;
 pub mod toon_comment;
 mod typescript;
 
@@ -69,11 +70,15 @@ pub trait LanguageParser: Send + Sync {
     /// Extract AST information (exports, imports, calls, signatures)
     fn extract_ast_info(&self, source: &str, file_path: &Path) -> Result<ASTInfo, ParseError>;
 
-    /// Extract @toon comments from source
+    /// Extract @dose comments from source
     fn extract_toon_comments(&self, source: &str) -> Result<ExtractedComments, ParseError>;
 
-    /// Strip @toon comments from source, returning cleaned source
+    /// Strip @dose comments from source, returning cleaned source
     fn strip_toon_comments(&self, source: &str, toon_path: &str) -> Result<String, ParseError>;
+
+    /// Get byte ranges of string literals in source (for minification)
+    /// Returns Vec of (start_byte, end_byte) ranges
+    fn get_string_ranges(&self, source: &str) -> Result<Vec<(usize, usize)>, ParseError>;
 }
 
 /// Factory for creating language parsers

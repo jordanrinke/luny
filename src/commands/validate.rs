@@ -1,4 +1,4 @@
-//! @toon
+//! @dose
 //! purpose: This module implements the validate command that checks .toon files for
 //!     correctness and consistency with their source files. It verifies exports match,
 //!     token counts are within limits, and required fields are present.
@@ -26,17 +26,22 @@
 //!     - Validate: For each TOON, parse it, find source, compare exports, check thresholds
 
 use crate::cli::ValidateArgs;
+use crate::config::{Config, ThresholdMatcher};
+use crate::exclusion::{build_exclude_globset, build_walker};
 use crate::formatter::{format_toon, parse_toon};
 use crate::parser::ParserFactory;
 use crate::types::{ToonData, ValidationResult};
 use anyhow::{Context, Result};
 use std::fs;
 use std::path::{Path, PathBuf};
-use walkdir::{DirEntry, WalkDir};
 
 pub fn run_validate(args: &ValidateArgs, root: &Path, verbose: bool) -> Result<()> {
     let factory = ParserFactory::new();
     let root_canon = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+
+    // Load configuration from luny.toml
+    let config = Config::load(root);
+    let threshold_matcher = config.threshold_matcher();
 
     // Determine paths to process
     let paths = if args.paths.is_empty() {
@@ -63,25 +68,44 @@ pub fn run_validate(args: &ValidateArgs, root: &Path, verbose: bool) -> Result<(
             continue;
         }
 
+        // Build exclusion configuration from args, merging with config patterns
+        let exclusion_config = args.common.exclusion_config(&config.exclude);
+
+        // Build glob set for additional pattern matching
+        let exclude_globset = build_exclude_globset(&args.common.exclude);
+
         // Deterministic ordering: collect all .toon paths and sort before validation.
         let mut toon_files: Vec<PathBuf> = Vec::new();
-        for entry in WalkDir::new(&full_path)
-            .follow_links(true)
-            .into_iter()
-            .filter_entry(|e| {
-                !is_excluded_dir(e) && is_allowed_symlink_target(e, &root_canon, args.unsafe_follow)
-            })
-            .filter_map(|e| e.ok())
-        {
-            let path = entry.path();
-            if path.is_file() && path.extension().map(|e| e == "toon").unwrap_or(false) {
-                toon_files.push(path.to_path_buf());
+        let mut walker = build_walker(&full_path, &exclusion_config);
+        walker.follow_links(true);
+
+        for entry in walker.build().filter_map(|e| e.ok()) {
+            let entry_path = entry.path();
+
+            // Check symlink safety
+            if entry_path.is_symlink()
+                && !is_allowed_symlink_target(entry_path, &root_canon, args.common.unsafe_follow)
+            {
+                continue;
+            }
+
+            // Check if file matches exclude patterns
+            if let Some(ref globset) = exclude_globset {
+                let relative = entry_path.strip_prefix(root).unwrap_or(entry_path);
+                if globset.is_match(relative) {
+                    continue;
+                }
+            }
+
+            if entry_path.is_file() && entry_path.extension().map(|e| e == "toon").unwrap_or(false)
+            {
+                toon_files.push(entry_path.to_path_buf());
             }
         }
         toon_files.sort();
 
         for toon_path in toon_files {
-            match validate_toon_file(&toon_path, &factory, args, root, verbose) {
+            match validate_toon_file(&toon_path, &factory, &threshold_matcher, root, verbose) {
                 Ok(mut result) => {
                     // Optional fix-up pass: regenerate invalid TOON files and re-validate.
                     if args.fix && !result.is_valid() {
@@ -92,7 +116,13 @@ pub fn run_validate(args: &ValidateArgs, root: &Path, verbose: bool) -> Result<(
                             eprintln!("Error fixing {}: {}", toon_path.display(), e);
                         } else {
                             // Re-validate after fix attempt (counts reflect final state).
-                            result = validate_toon_file(&toon_path, &factory, args, root, verbose)?;
+                            result = validate_toon_file(
+                                &toon_path,
+                                &factory,
+                                &threshold_matcher,
+                                root,
+                                verbose,
+                            )?;
                         }
                     }
 
@@ -133,24 +163,11 @@ pub fn run_validate(args: &ValidateArgs, root: &Path, verbose: bool) -> Result<(
     Ok(())
 }
 
-fn is_excluded_dir(entry: &DirEntry) -> bool {
-    if !entry.file_type().is_dir() {
-        return false;
-    }
-    matches!(
-        entry.file_name().to_string_lossy().as_ref(),
-        ".git" | "node_modules" | "target" | "__pycache__"
-    )
-}
-
-fn is_allowed_symlink_target(entry: &DirEntry, root_canon: &Path, unsafe_follow: bool) -> bool {
+fn is_allowed_symlink_target(path: &Path, root_canon: &Path, unsafe_follow: bool) -> bool {
     if unsafe_follow {
         return true;
     }
-    if !entry.path_is_symlink() {
-        return true;
-    }
-    match entry.path().canonicalize() {
+    match path.canonicalize() {
         Ok(real) => real.starts_with(root_canon),
         Err(_) => false,
     }
@@ -159,7 +176,7 @@ fn is_allowed_symlink_target(entry: &DirEntry, root_canon: &Path, unsafe_follow:
 fn validate_toon_file(
     toon_path: &Path,
     factory: &ParserFactory,
-    args: &ValidateArgs,
+    threshold_matcher: &ThresholdMatcher,
     root: &Path,
     verbose: bool,
 ) -> Result<ValidationResult> {
@@ -200,17 +217,26 @@ fn validate_toon_file(
         let source = fs::read_to_string(&source_path).context("Failed to read source file")?;
         let ast_info = parser.extract_ast_info(&source, &source_path)?;
 
-        // Check token count
-        if ast_info.tokens > args.token_error {
-            result.add_error(format!(
-                "Token count {} exceeds error threshold {}",
-                ast_info.tokens, args.token_error
-            ));
-        } else if ast_info.tokens > args.token_warn {
-            result.add_warning(format!(
-                "Token count {} exceeds warning threshold {}",
-                ast_info.tokens, args.token_warn
-            ));
+        // Check token count using per-file thresholds
+        let relative_source = source_path.strip_prefix(root).unwrap_or(&source_path);
+        let thresholds = threshold_matcher.get_thresholds(relative_source);
+        if let Some(error_threshold) = thresholds.error {
+            if ast_info.tokens > error_threshold {
+                result.add_error(format!(
+                    "Token count {} exceeds error threshold {}",
+                    ast_info.tokens, error_threshold
+                ));
+            }
+        }
+        if let Some(warn_threshold) = thresholds.warn {
+            if ast_info.tokens > warn_threshold
+                && thresholds.error.is_none_or(|e| ast_info.tokens <= e)
+            {
+                result.add_warning(format!(
+                    "Token count {} exceeds warning threshold {}",
+                    ast_info.tokens, warn_threshold
+                ));
+            }
         }
 
         // Check exports match
@@ -350,37 +376,30 @@ mod tests {
 
     // ==================== validate_toon_file Tests ====================
 
-    fn create_test_env() -> (TempDir, ParserFactory) {
+    fn create_test_env() -> (TempDir, ParserFactory, ThresholdMatcher) {
         let temp_dir = TempDir::new().unwrap();
         let factory = ParserFactory::new();
+        let config = Config::default();
+        let threshold_matcher = config.threshold_matcher();
 
         // Create .ai directory
         fs::create_dir(temp_dir.path().join(".ai")).unwrap();
 
-        (temp_dir, factory)
+        (temp_dir, factory, threshold_matcher)
     }
 
     #[test]
     fn test_validate_missing_source_file() {
-        let (temp_dir, factory) = create_test_env();
+        let (temp_dir, factory, threshold_matcher) = create_test_env();
 
         // Create TOON file without source
         let toon_content = "purpose: Test module\ntokens: ~100\nexports[0]:";
         fs::write(temp_dir.path().join(".ai/missing.ts.toon"), toon_content).unwrap();
 
-        let args = ValidateArgs {
-            paths: vec![],
-            fix: false,
-            strict: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
-
         let result = validate_toon_file(
             &temp_dir.path().join(".ai/missing.ts.toon"),
             &factory,
-            &args,
+            &threshold_matcher,
             temp_dir.path(),
             false,
         )
@@ -392,7 +411,7 @@ mod tests {
 
     #[test]
     fn test_validate_missing_purpose() {
-        let (temp_dir, factory) = create_test_env();
+        let (temp_dir, factory, threshold_matcher) = create_test_env();
 
         // Create source file
         fs::write(temp_dir.path().join("test.ts"), "export const x = 1;").unwrap();
@@ -401,19 +420,10 @@ mod tests {
         let toon_content = "tokens: ~100\nexports[1]: x(const)";
         fs::write(temp_dir.path().join(".ai/test.ts.toon"), toon_content).unwrap();
 
-        let args = ValidateArgs {
-            paths: vec![],
-            fix: false,
-            strict: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
-
         let result = validate_toon_file(
             &temp_dir.path().join(".ai/test.ts.toon"),
             &factory,
-            &args,
+            &threshold_matcher,
             temp_dir.path(),
             false,
         )
@@ -425,7 +435,8 @@ mod tests {
 
     #[test]
     fn test_validate_token_warning() {
-        let (temp_dir, factory) = create_test_env();
+        use crate::config::TokenConfig;
+        let (temp_dir, factory, _) = create_test_env();
 
         // Create source file with content
         let source = "export const x = 1;\nexport function foo() { return 42; }";
@@ -435,19 +446,18 @@ mod tests {
         let toon_content = "purpose: Test module\ntokens: ~50\nexports[2]: x(const), foo(function)";
         fs::write(temp_dir.path().join(".ai/test.ts.toon"), toon_content).unwrap();
 
-        let args = ValidateArgs {
-            paths: vec![],
-            fix: false,
-            strict: false,
-            unsafe_follow: false,
-            token_warn: 10, // Very low threshold to trigger warning
-            token_error: 1000,
+        // Create custom threshold matcher with low warning threshold
+        let token_config = TokenConfig {
+            warn: 10,
+            error: 1000,
+            overrides: vec![],
         };
+        let threshold_matcher = ThresholdMatcher::new(&token_config);
 
         let result = validate_toon_file(
             &temp_dir.path().join(".ai/test.ts.toon"),
             &factory,
-            &args,
+            &threshold_matcher,
             temp_dir.path(),
             false,
         )
@@ -459,7 +469,8 @@ mod tests {
 
     #[test]
     fn test_validate_token_error() {
-        let (temp_dir, factory) = create_test_env();
+        use crate::config::TokenConfig;
+        let (temp_dir, factory, _) = create_test_env();
 
         // Create source file
         let source = "export const x = 1;\nexport function foo() { return 42; }";
@@ -469,19 +480,18 @@ mod tests {
         let toon_content = "purpose: Test module\ntokens: ~50\nexports[2]: x(const), foo(function)";
         fs::write(temp_dir.path().join(".ai/test.ts.toon"), toon_content).unwrap();
 
-        let args = ValidateArgs {
-            paths: vec![],
-            fix: false,
-            strict: false,
-            unsafe_follow: false,
-            token_warn: 5,
-            token_error: 10, // Very low threshold to trigger error
+        // Create custom threshold matcher with low error threshold
+        let token_config = TokenConfig {
+            warn: 5,
+            error: 10,
+            overrides: vec![],
         };
+        let threshold_matcher = ThresholdMatcher::new(&token_config);
 
         let result = validate_toon_file(
             &temp_dir.path().join(".ai/test.ts.toon"),
             &factory,
-            &args,
+            &threshold_matcher,
             temp_dir.path(),
             false,
         )
@@ -494,7 +504,7 @@ mod tests {
 
     #[test]
     fn test_validate_missing_export_warning() {
-        let (temp_dir, factory) = create_test_env();
+        let (temp_dir, factory, threshold_matcher) = create_test_env();
 
         // Create source file with exports
         let source = "export const x = 1;\nexport function foo() {}";
@@ -504,19 +514,10 @@ mod tests {
         let toon_content = "purpose: Test module\ntokens: ~50\nexports[1]: x(const)";
         fs::write(temp_dir.path().join(".ai/test.ts.toon"), toon_content).unwrap();
 
-        let args = ValidateArgs {
-            paths: vec![],
-            fix: false,
-            strict: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
-
         let result = validate_toon_file(
             &temp_dir.path().join(".ai/test.ts.toon"),
             &factory,
-            &args,
+            &threshold_matcher,
             temp_dir.path(),
             false,
         )
@@ -531,7 +532,7 @@ mod tests {
 
     #[test]
     fn test_validate_extra_export_warning() {
-        let (temp_dir, factory) = create_test_env();
+        let (temp_dir, factory, threshold_matcher) = create_test_env();
 
         // Create source file with one export
         let source = "export const x = 1;";
@@ -542,19 +543,10 @@ mod tests {
             "purpose: Test module\ntokens: ~50\nexports[2]: x(const), removed(function)";
         fs::write(temp_dir.path().join(".ai/test.ts.toon"), toon_content).unwrap();
 
-        let args = ValidateArgs {
-            paths: vec![],
-            fix: false,
-            strict: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
-
         let result = validate_toon_file(
             &temp_dir.path().join(".ai/test.ts.toon"),
             &factory,
-            &args,
+            &threshold_matcher,
             temp_dir.path(),
             false,
         )
@@ -569,7 +561,7 @@ mod tests {
 
     #[test]
     fn test_validate_purpose_only_is_valid() {
-        let (temp_dir, factory) = create_test_env();
+        let (temp_dir, factory, threshold_matcher) = create_test_env();
 
         // Create source file
         let source = "export const x = 1;";
@@ -579,19 +571,10 @@ mod tests {
         let toon_content = "purpose: Test module\ntokens: ~50\nexports[1]: x(const)";
         fs::write(temp_dir.path().join(".ai/test.ts.toon"), toon_content).unwrap();
 
-        let args = ValidateArgs {
-            paths: vec![],
-            fix: false,
-            strict: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
-
         let result = validate_toon_file(
             &temp_dir.path().join(".ai/test.ts.toon"),
             &factory,
-            &args,
+            &threshold_matcher,
             temp_dir.path(),
             false,
         )
@@ -604,7 +587,7 @@ mod tests {
 
     #[test]
     fn test_validate_valid_toon_file() {
-        let (temp_dir, factory) = create_test_env();
+        let (temp_dir, factory, threshold_matcher) = create_test_env();
 
         // Create source file
         let source = "export const x = 1;";
@@ -619,19 +602,10 @@ gotchas: None
 "#;
         fs::write(temp_dir.path().join(".ai/test.ts.toon"), toon_content).unwrap();
 
-        let args = ValidateArgs {
-            paths: vec![],
-            fix: false,
-            strict: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
-
         let result = validate_toon_file(
             &temp_dir.path().join(".ai/test.ts.toon"),
             &factory,
-            &args,
+            &threshold_matcher,
             temp_dir.path(),
             false,
         )
@@ -647,14 +621,7 @@ gotchas: None
     fn test_run_validate_no_ai_directory() {
         let temp_dir = TempDir::new().unwrap();
 
-        let args = ValidateArgs {
-            paths: vec![],
-            fix: false,
-            strict: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
+        let args = ValidateArgs::default();
 
         // Should succeed even without .ai directory
         let result = run_validate(&args, temp_dir.path(), false);
@@ -666,14 +633,7 @@ gotchas: None
         let temp_dir = TempDir::new().unwrap();
         fs::create_dir(temp_dir.path().join(".ai")).unwrap();
 
-        let args = ValidateArgs {
-            paths: vec![],
-            fix: false,
-            strict: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
+        let args = ValidateArgs::default();
 
         let result = run_validate(&args, temp_dir.path(), false);
         assert!(result.is_ok());
@@ -696,14 +656,7 @@ invariants: Always export x
 "#;
         fs::write(temp_dir.path().join(".ai/test.ts.toon"), toon_content).unwrap();
 
-        let args = ValidateArgs {
-            paths: vec![],
-            fix: false,
-            strict: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
+        let args = ValidateArgs::default();
 
         let result = run_validate(&args, temp_dir.path(), false);
         assert!(result.is_ok());
@@ -718,14 +671,7 @@ invariants: Always export x
         let toon_content = "purpose: Test module\ntokens: ~100\nexports[0]:";
         fs::write(temp_dir.path().join(".ai/missing.ts.toon"), toon_content).unwrap();
 
-        let args = ValidateArgs {
-            paths: vec![],
-            fix: false,
-            strict: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
+        let args = ValidateArgs::default();
 
         let result = run_validate(&args, temp_dir.path(), false);
         assert!(result.is_err());
@@ -745,12 +691,8 @@ invariants: Always export x
         fs::write(temp_dir.path().join(".ai/test.ts.toon"), toon_content).unwrap();
 
         let args = ValidateArgs {
-            paths: vec![],
-            fix: false,
             strict: true, // Strict mode
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
+            ..Default::default()
         };
 
         let result = run_validate(&args, temp_dir.path(), false);
@@ -787,11 +729,7 @@ invariants: Always export x
 
         let args = ValidateArgs {
             paths: vec![ai_src.clone()], // Only validate src
-            fix: false,
-            strict: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
+            ..Default::default()
         };
 
         // Should succeed because we only validate src, not lib
@@ -816,14 +754,7 @@ invariants: Always export x
         let toon_content = "purpose: Button component\ntokens: ~50\nexports[1]: Button(function)\ninvariants: Must be a function";
         fs::write(ai_nested.join("Button.tsx.toon"), toon_content).unwrap();
 
-        let args = ValidateArgs {
-            paths: vec![],
-            fix: false,
-            strict: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
+        let args = ValidateArgs::default();
 
         let result = run_validate(&args, temp_dir.path(), false);
         assert!(result.is_ok());

@@ -1,6 +1,6 @@
-purpose: Sample Go fixture for testing the luny Go parser.
-tokens: ~1525
-exports[25]: Version(const), DefaultTimeout(const), MaxRetries(const), UserID(type), Repository(interface), UserConfig(struct), UserService(struct), NewUserService(fn), Get(method(UserService)), Save(method(UserService)), Delete(method(UserService)), List(method(UserService)), CreateUser(fn), ValidateEmail(fn), Logger(interface), ConsoleLogger(struct), NewConsoleLogger(fn), Info(method(ConsoleLogger)), Error(method(ConsoleLogger)), Debug(method(ConsoleLogger)), Filter(fn), Cache(struct), NewCache(fn), Get(method(Cache[K, V])), Set(method(Cache[K, V]))
+purpose: Sample Go fixture for testing the luny Go parser. This file contains various Go constructs including structs, interfaces, functions, and methods to verify extraction works correctly.
+tokens: ~1654
+exports[26]: Version(const), DefaultTimeout(const), MaxRetries(const), DefaultConfig(var), UserID(type), Repository(interface), UserConfig(struct), UserService(struct), NewUserService(fn), Get(method(UserService)), Save(method(UserService)), Delete(method(UserService)), List(method(UserService)), CreateUser(fn), ValidateEmail(fn), Logger(interface), ConsoleLogger(struct), NewConsoleLogger(fn), Info(method(ConsoleLogger)), Error(method(ConsoleLogger)), Debug(method(ConsoleLogger)), Filter(fn), Cache(struct), NewCache(fn), Get(method(Cache[K, V])), Set(method(Cache[K, V]))
 signatures[22]:
   UserID(type): string
   Repository(interface): interface{}
@@ -28,5 +28,5 @@ when-editing: !Keep both exported (uppercase) and unexported (lowercase) items f
 invariants: Exported items must start with uppercase letters; Unexported items must start with lowercase letters; Include examples of interfaces, structs, and functions
 do-not: Remove any exports without updating corresponding tests; Use cgo in this fixture
 imports[7]{from,items}: encoding/json,json; fmt,fmt; io/ioutil,ioutil; os,os; path/filepath,filepath; sync,sync; time,time
-calls[6]{target,methods}: io/ioutil,ReadFile|ReadDir|WriteFile; fmt,Errorf|Printf|Sprintf; os,IsNotExist|MkdirAll|Remove; encoding/json,MarshalIndent|Unmarshal; path/filepath,Join|Ext; time,Now
+calls[6]{target,methods}: fmt,Sprintf|Errorf|Printf; encoding/json,Unmarshal|MarshalIndent; time,Now; os,MkdirAll|Remove|IsNotExist; io/ioutil,ReadDir|ReadFile|WriteFile; path/filepath,Join|Ext
 gotchas: Go determines visibility by the first letter case; Methods with pointer receivers are common patterns; Interface satisfaction is implicit

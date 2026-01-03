@@ -11,7 +11,7 @@ fn bin() -> Command {
 fn e2e_golden_output_exact() {
     let temp_dir = TempDir::new().expect("temp dir");
 
-    let source = r#"/** @toon
+    let source = r#"/** @dose
 purpose: Auth module
 
 invariants:
@@ -20,7 +20,7 @@ invariants:
 
 export interface User { id: string }
 
-/** @toon invariant: caller must be authed */
+/** @dose invariant: caller must be authed */
 export function getUser(): User { return { id: "1" }; }
 "#;
 

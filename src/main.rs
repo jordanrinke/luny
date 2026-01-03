@@ -1,4 +1,4 @@
-//! @toon
+//! @dose
 //! purpose: This is the CLI entry point for luny. It parses command-line arguments using clap,
 //!     determines the project root directory, and dispatches to the appropriate command handler
 //!     (generate, validate, or strip).

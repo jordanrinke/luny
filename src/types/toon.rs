@@ -1,4 +1,4 @@
-//! @toon
+//! @dose
 //! purpose: This module defines all core data types used throughout luny, including export
 //!     information, import tracking, call relationships, and the main ToonData structure
 //!     that represents the complete DOSE for a source file.
@@ -24,7 +24,7 @@
 //!
 //! flows:
 //!     - Parser extracts ASTInfo from source code
-//!     - Parser extracts ExtractedComments from @toon blocks
+//!     - Parser extracts ExtractedComments from @dose blocks
 //!     - generate command merges both into ToonData
 //!     - formatter converts ToonData to TOON file text
 
@@ -124,16 +124,16 @@ pub struct ASTInfo {
     pub signatures: Vec<SignatureInfo>,
 }
 
-/// Result of extracting @toon comments from source
+/// Result of extracting @dose comments from source
 #[derive(Debug, Clone, Default)]
 pub struct ExtractedComments {
-    /// File-level @toon block content (parsed fields)
+    /// File-level @dose block content (parsed fields)
     pub file_block: Option<ToonCommentBlock>,
     /// Function-level annotations: function_name -> annotations
     pub function_annotations: HashMap<String, FunctionAnnotation>,
 }
 
-/// Parsed content from a @toon block comment
+/// Parsed content from a @dose block comment
 #[derive(Debug, Clone, Default)]
 pub struct ToonCommentBlock {
     pub purpose: Option<String>,

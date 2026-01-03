@@ -1,10 +1,12 @@
-purpose: This module defines the command-line interface for luny using the clap derive
-tokens: ~3277
-exports[5]: Cli(struct), Commands(enum), GenerateArgs(struct), ValidateArgs(struct), StripArgs(struct)
-signatures[5]:
+purpose: This module defines the command-line interface for luny using the clap derive macros. It specifies all commands (generate, validate, strip) and their arguments.
+tokens: ~2683
+exports[8]: Cli(struct), Commands(enum), CommonOptions(struct), exclusion_config(method(CommonOptions)), exclusion_config(fn), GenerateArgs(struct), ValidateArgs(struct), StripArgs(struct)
+signatures[7]:
   Cli(struct): { root: Option<PathBuf>, verbose: bool, command: Commands }
   Commands(enum): { Generate | Validate | Strip }
-  GenerateArgs(struct): { paths: Vec<PathBuf>, dry_run: bool, force: bool, unsafe_follow: bool, token_warn: usize, ... }
-  ValidateArgs(struct): { paths: Vec<PathBuf>, fix: bool, strict: bool, unsafe_follow: bool, token_warn: usize, ... }
-  StripArgs(struct): { input: Option<PathBuf>, output: Option<PathBuf>, ext: Option<String> }
-imports[4]{from,items}: clap,Args|Parser|Subcommand; std::path,PathBuf; super::*,super::*; clap,CommandFactory
+  CommonOptions(struct): { unsafe_follow: bool, token_warn: usize, token_error: usize, exclude: Vec<String>, no_gitignore: bool, ... }
+  exclusion_config(fn): (&self, config_patterns: &[String]) ExclusionConfig
+  GenerateArgs(struct): { paths: Vec<PathBuf>, dry_run: bool, force: bool, clean: bool, common: CommonOptions, ... }
+  ValidateArgs(struct): { paths: Vec<PathBuf>, fix: bool, strict: bool, common: CommonOptions }
+  StripArgs(struct): { input: Option<PathBuf>, output: Option<PathBuf>, ext: Option<String>, minify: bool, minify_extreme: bool, ... }
+imports[5]{from,items}: crate::exclusion,ExclusionConfig; clap,Args|Parser|Subcommand; std::path,PathBuf; super::*,super::*; clap,CommandFactory

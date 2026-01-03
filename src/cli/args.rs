@@ -1,4 +1,4 @@
-//! @toon
+//! @dose
 //! purpose: This module defines the command-line interface for luny using the clap derive
 //!     macros. It specifies all commands (generate, validate, strip) and their arguments.
 //!
@@ -21,6 +21,7 @@
 //!     - Token thresholds have separate warn and error levels that can be customized
 //!     - The --root flag is global but optional; defaults to current directory in main.rs
 
+use crate::exclusion::ExclusionConfig;
 use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -49,11 +50,64 @@ pub enum Commands {
     /// Validate existing TOON DOSE files against source
     Validate(ValidateArgs),
 
-    /// Strip @toon comments from source files
+    /// Strip @dose comments from source files
     Strip(StripArgs),
 }
 
-#[derive(Args)]
+/// Common options shared between generate and validate commands
+#[derive(Args, Clone)]
+pub struct CommonOptions {
+    /// Follow symlinks that resolve outside of the project root (DANGEROUS).
+    ///
+    /// By default, luny follows symlinks but will only process targets whose resolved paths
+    /// stay within `--root`. This flag disables that safety boundary.
+    #[arg(long)]
+    pub unsafe_follow: bool,
+
+    /// Token count warning threshold
+    #[arg(long, default_value = "500")]
+    #[arg(default_value_t = 500)]
+    pub token_warn: usize,
+
+    /// Token count error threshold
+    #[arg(long, default_value = "1000")]
+    #[arg(default_value_t = 1000)]
+    pub token_error: usize,
+
+    /// Exclude files/directories matching glob pattern (can be repeated)
+    #[arg(long, value_name = "PATTERN")]
+    pub exclude: Vec<String>,
+
+    /// Don't respect .gitignore files
+    #[arg(long)]
+    pub no_gitignore: bool,
+}
+
+impl Default for CommonOptions {
+    fn default() -> Self {
+        Self {
+            unsafe_follow: false,
+            token_warn: 500,
+            token_error: 1000,
+            exclude: Vec::new(),
+            no_gitignore: false,
+        }
+    }
+}
+
+impl CommonOptions {
+    /// Create an ExclusionConfig from these options, merging with config file patterns
+    pub fn exclusion_config(&self, config_patterns: &[String]) -> ExclusionConfig {
+        let mut patterns = config_patterns.to_vec();
+        patterns.extend(self.exclude.clone());
+        ExclusionConfig {
+            patterns,
+            respect_gitignore: !self.no_gitignore,
+        }
+    }
+}
+
+#[derive(Args, Default)]
 pub struct GenerateArgs {
     /// Specific files or directories to process
     #[arg(value_name = "PATH")]
@@ -67,23 +121,15 @@ pub struct GenerateArgs {
     #[arg(short, long)]
     pub force: bool,
 
-    /// Follow symlinks that resolve outside of the project root (DANGEROUS).
-    ///
-    /// By default, luny follows symlinks but will only process targets whose resolved paths
-    /// stay within `--root`. This flag disables that safety boundary.
+    /// Clean the .ai directory before generating (removes stale files)
     #[arg(long)]
-    pub unsafe_follow: bool,
+    pub clean: bool,
 
-    /// Token count warning threshold
-    #[arg(long, default_value = "500")]
-    pub token_warn: usize,
-
-    /// Token count error threshold
-    #[arg(long, default_value = "1000")]
-    pub token_error: usize,
+    #[command(flatten)]
+    pub common: CommonOptions,
 }
 
-#[derive(Args)]
+#[derive(Args, Default)]
 pub struct ValidateArgs {
     /// Specific TOON files to validate
     #[arg(value_name = "PATH")]
@@ -97,20 +143,8 @@ pub struct ValidateArgs {
     #[arg(long)]
     pub strict: bool,
 
-    /// Follow symlinks that resolve outside of the project root (DANGEROUS).
-    ///
-    /// By default, luny follows symlinks but will only process targets whose resolved paths
-    /// stay within `--root`. This flag disables that safety boundary.
-    #[arg(long)]
-    pub unsafe_follow: bool,
-
-    /// Token count warning threshold
-    #[arg(long, default_value = "500")]
-    pub token_warn: usize,
-
-    /// Token count error threshold
-    #[arg(long, default_value = "1000")]
-    pub token_error: usize,
+    #[command(flatten)]
+    pub common: CommonOptions,
 }
 
 #[derive(Args)]
@@ -125,6 +159,14 @@ pub struct StripArgs {
     /// Language extension hint when reading from stdin
     #[arg(long)]
     pub ext: Option<String>,
+
+    /// Minify output to reduce tokens (removes blank lines; also strips indentation for non-whitespace-sensitive languages)
+    #[arg(short, long)]
+    pub minify: bool,
+
+    /// Experimental: aggressive minification using AST-aware whitespace removal (preserves string literals)
+    #[arg(long)]
+    pub minify_extreme: bool,
 }
 
 #[cfg(test)]
@@ -148,8 +190,8 @@ mod tests {
         assert!(args.paths.is_empty());
         assert!(!args.dry_run);
         assert!(!args.force);
-        assert_eq!(args.token_warn, 500);
-        assert_eq!(args.token_error, 1000);
+        assert_eq!(args.common.token_warn, 500);
+        assert_eq!(args.common.token_error, 1000);
 
         // With paths
         let cli = Cli::try_parse_from(["luny", "generate", "src/", "lib/"]).unwrap();
@@ -184,8 +226,8 @@ mod tests {
         let Commands::Generate(args) = cli.command else {
             panic!("Expected Generate")
         };
-        assert_eq!(args.token_warn, 300);
-        assert_eq!(args.token_error, 600);
+        assert_eq!(args.common.token_warn, 300);
+        assert_eq!(args.common.token_error, 600);
     }
 
     /// Comprehensive test for validate command and all its options
@@ -199,8 +241,8 @@ mod tests {
         assert!(args.paths.is_empty());
         assert!(!args.fix);
         assert!(!args.strict);
-        assert_eq!(args.token_warn, 500);
-        assert_eq!(args.token_error, 1000);
+        assert_eq!(args.common.token_warn, 500);
+        assert_eq!(args.common.token_error, 1000);
 
         // With path
         let cli = Cli::try_parse_from(["luny", "validate", ".ai/src/main.ts.toon"]).unwrap();

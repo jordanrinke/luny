@@ -1,4 +1,4 @@
-//! @toon
+//! @dose
 //! purpose: This module implements the generate command that creates .toon DOSE files
 //!     for source code files. It uses a two-pass algorithm to build dependency graphs and
 //!     generate comprehensive documentation.
@@ -28,6 +28,8 @@
 //!     - Generate: For each file, extract AST + comments, merge with graph data, format TOON
 
 use crate::cli::GenerateArgs;
+use crate::config::{Config, ThresholdMatcher};
+use crate::exclusion::{build_exclude_globset, build_walker};
 use crate::formatter::format_toon;
 use crate::parser::ParserFactory;
 use crate::types::{CalledByInfo, ToonData};
@@ -35,7 +37,6 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use walkdir::{DirEntry, WalkDir};
 
 /// Dependency graph for reverse lookups
 struct DependencyGraph {
@@ -65,10 +66,29 @@ impl DependencyGraph {
 pub fn run_generate(args: &GenerateArgs, root: &Path, verbose: bool) -> Result<()> {
     let factory = ParserFactory::new();
 
+    // Load configuration from luny.toml
+    let config = Config::load(root);
+    let threshold_matcher = config.threshold_matcher();
+
+    // Clean the .ai directory if requested (via CLI flag or config)
+    if args.clean || config.clean {
+        let ai_dir = root.join(".ai");
+        if ai_dir.exists() {
+            if args.dry_run {
+                println!("Would remove: {}", ai_dir.display());
+            } else {
+                if verbose {
+                    println!("Cleaning .ai directory...");
+                }
+                fs::remove_dir_all(&ai_dir).context("Failed to remove .ai directory")?;
+            }
+        }
+    }
+
     let root_canon = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
 
     // Collect all files to process
-    let files = collect_files(args, root, &root_canon, &factory);
+    let files = collect_files(args, root, &root_canon, &factory, &config);
 
     if verbose {
         println!("Building dependency graph for {} files...", files.len());
@@ -91,7 +111,15 @@ pub fn run_generate(args: &GenerateArgs, root: &Path, verbose: bool) -> Result<(
     let mut errors = 0;
 
     for path in &files {
-        match process_file(path, &factory, args, root, &dep_graph, verbose) {
+        match process_file(
+            path,
+            &factory,
+            args,
+            root,
+            &dep_graph,
+            &threshold_matcher,
+            verbose,
+        ) {
             Ok(true) => processed += 1,
             Ok(false) => skipped += 1,
             Err(e) => {
@@ -118,6 +146,7 @@ fn collect_files(
     root: &Path,
     root_canon: &Path,
     factory: &ParserFactory,
+    config: &Config,
 ) -> Vec<PathBuf> {
     let mut files = Vec::new();
 
@@ -127,6 +156,12 @@ fn collect_files(
         args.paths.clone()
     };
 
+    // Build exclusion configuration from args, merging with config patterns
+    let exclusion_config = args.common.exclusion_config(&config.exclude);
+
+    // Build glob set for additional pattern matching (for paths specified via CLI)
+    let exclude_globset = build_exclude_globset(&args.common.exclude);
+
     for path in paths {
         let full_path = if path.is_absolute() {
             path
@@ -135,20 +170,30 @@ fn collect_files(
         };
 
         if full_path.is_file() {
+            // Check if single file matches exclude patterns
+            if let Some(ref globset) = exclude_globset {
+                let relative = full_path.strip_prefix(root).unwrap_or(&full_path);
+                if globset.is_match(relative) {
+                    continue;
+                }
+            }
             files.push(full_path);
         } else if full_path.is_dir() {
-            for entry in WalkDir::new(&full_path)
-                .follow_links(true)
-                .into_iter()
-                .filter_entry(|e| {
-                    !is_excluded_dir(e)
-                        && is_allowed_symlink_target(e, root_canon, args.unsafe_follow)
-                })
-                .filter_map(|e| e.ok())
-            {
-                let path = entry.path();
-                if path.is_file() && factory.is_supported(path) {
-                    files.push(path.to_path_buf());
+            let mut walker = build_walker(&full_path, &exclusion_config);
+            walker.follow_links(true);
+
+            for entry in walker.build().filter_map(|e| e.ok()) {
+                let entry_path = entry.path();
+
+                // Check symlink safety
+                if entry_path.is_symlink()
+                    && !is_allowed_symlink_target(entry_path, root_canon, args.common.unsafe_follow)
+                {
+                    continue;
+                }
+
+                if entry_path.is_file() && factory.is_supported(entry_path) {
+                    files.push(entry_path.to_path_buf());
                 }
             }
         }
@@ -160,29 +205,12 @@ fn collect_files(
     files
 }
 
-fn is_excluded_dir(entry: &DirEntry) -> bool {
-    if !entry.file_type().is_dir() {
-        return false;
-    }
-
-    match entry.file_name().to_string_lossy().as_ref() {
-        // Common heavyweight/irrelevant dirs
-        "node_modules" | ".git" | "target" | "__pycache__" => true,
-        // Avoid reading/writing generated outputs back into inputs
-        ".ai" => true,
-        _ => false,
-    }
-}
-
-fn is_allowed_symlink_target(entry: &DirEntry, root_canon: &Path, unsafe_follow: bool) -> bool {
+fn is_allowed_symlink_target(path: &Path, root_canon: &Path, unsafe_follow: bool) -> bool {
     if unsafe_follow {
         return true;
     }
-    if !entry.path_is_symlink() {
-        return true;
-    }
     // Only follow symlinks whose resolved targets stay within the root.
-    match entry.path().canonicalize() {
+    match path.canonicalize() {
         Ok(real) => real.starts_with(root_canon),
         // If we can't resolve it, treat it as not allowed (avoids surprising escapes).
         Err(_) => false,
@@ -288,6 +316,7 @@ fn process_file(
     args: &GenerateArgs,
     root: &Path,
     dep_graph: &DependencyGraph,
+    threshold_matcher: &ThresholdMatcher,
     verbose: bool,
 ) -> Result<bool> {
     let parser = factory
@@ -320,24 +349,31 @@ fn process_file(
     // Extract AST info
     let ast_info = parser.extract_ast_info(&source, path)?;
 
-    // Check token limits
-    if ast_info.tokens > args.token_error {
-        eprintln!(
-            "ERROR: {} has {} tokens (exceeds error threshold of {})",
-            path.display(),
-            ast_info.tokens,
-            args.token_error
-        );
-    } else if ast_info.tokens > args.token_warn {
-        eprintln!(
-            "WARNING: {} has {} tokens (exceeds warning threshold of {})",
-            path.display(),
-            ast_info.tokens,
-            args.token_warn
-        );
+    // Check token limits using per-file thresholds
+    let thresholds = threshold_matcher.get_thresholds(relative);
+    if let Some(error_threshold) = thresholds.error {
+        if ast_info.tokens > error_threshold {
+            eprintln!(
+                "ERROR: {} has {} tokens (exceeds error threshold of {})",
+                path.display(),
+                ast_info.tokens,
+                error_threshold
+            );
+        }
+    }
+    if let Some(warn_threshold) = thresholds.warn {
+        if ast_info.tokens > warn_threshold && thresholds.error.is_none_or(|e| ast_info.tokens <= e)
+        {
+            eprintln!(
+                "WARNING: {} has {} tokens (exceeds warning threshold of {})",
+                path.display(),
+                ast_info.tokens,
+                warn_threshold
+            );
+        }
     }
 
-    // Extract @toon comments
+    // Extract @dose comments
     let comments = parser.extract_toon_comments(&source)?;
 
     // Build purpose from comments or generate default
@@ -408,7 +444,7 @@ fn process_file(
         toon_data.related = block.related.clone();
     }
 
-    // Add function-level annotations (inline @toon comments)
+    // Add function-level annotations (inline @dose comments)
     if !comments.function_annotations.is_empty() {
         toon_data.function_annotations =
             Some(comments.function_annotations.values().cloned().collect());
@@ -661,16 +697,10 @@ mod tests {
     fn test_collect_files_empty_dir() {
         let temp_dir = TempDir::new().unwrap();
         let factory = ParserFactory::new();
-        let args = GenerateArgs {
-            paths: vec![],
-            dry_run: false,
-            force: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
+        let args = GenerateArgs::default();
+        let config = Config::default();
 
-        let files = collect_files(&args, temp_dir.path(), temp_dir.path(), &factory);
+        let files = collect_files(&args, temp_dir.path(), temp_dir.path(), &factory, &config);
         assert!(files.is_empty());
     }
 
@@ -684,16 +714,10 @@ mod tests {
         fs::write(temp_dir.path().join("utils.py"), "def foo(): pass").unwrap();
         fs::write(temp_dir.path().join("readme.md"), "# Readme").unwrap();
 
-        let args = GenerateArgs {
-            paths: vec![],
-            dry_run: false,
-            force: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
+        let args = GenerateArgs::default();
+        let config = Config::default();
 
-        let files = collect_files(&args, temp_dir.path(), temp_dir.path(), &factory);
+        let files = collect_files(&args, temp_dir.path(), temp_dir.path(), &factory, &config);
         // Should find .ts and .py but not .md
         assert_eq!(files.len(), 2);
     }
@@ -711,16 +735,10 @@ mod tests {
         // Create a file outside node_modules
         fs::write(temp_dir.path().join("main.ts"), "export const y = 2;").unwrap();
 
-        let args = GenerateArgs {
-            paths: vec![],
-            dry_run: false,
-            force: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
+        let args = GenerateArgs::default();
+        let config = Config::default();
 
-        let files = collect_files(&args, temp_dir.path(), temp_dir.path(), &factory);
+        let files = collect_files(&args, temp_dir.path(), temp_dir.path(), &factory, &config);
         // Should only find main.ts, not the one in node_modules
         assert_eq!(files.len(), 1);
         assert!(files[0].to_string_lossy().contains("main.ts"));
@@ -739,16 +757,10 @@ mod tests {
         // Create a file outside .git
         fs::write(temp_dir.path().join("main.ts"), "export const y = 2;").unwrap();
 
-        let args = GenerateArgs {
-            paths: vec![],
-            dry_run: false,
-            force: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
+        let args = GenerateArgs::default();
+        let config = Config::default();
 
-        let files = collect_files(&args, temp_dir.path(), temp_dir.path(), &factory);
+        let files = collect_files(&args, temp_dir.path(), temp_dir.path(), &factory, &config);
         assert_eq!(files.len(), 1);
         assert!(files[0].to_string_lossy().contains("main.ts"));
     }
@@ -766,16 +778,10 @@ mod tests {
         // Create a file outside target
         fs::write(temp_dir.path().join("main.rs"), "fn main() {}").unwrap();
 
-        let args = GenerateArgs {
-            paths: vec![],
-            dry_run: false,
-            force: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
+        let args = GenerateArgs::default();
+        let config = Config::default();
 
-        let files = collect_files(&args, temp_dir.path(), temp_dir.path(), &factory);
+        let files = collect_files(&args, temp_dir.path(), temp_dir.path(), &factory, &config);
         assert_eq!(files.len(), 1);
         assert!(files[0].to_string_lossy().contains("main.rs"));
     }
@@ -793,16 +799,10 @@ mod tests {
         // Create a file outside __pycache__
         fs::write(temp_dir.path().join("main.py"), "def main(): pass").unwrap();
 
-        let args = GenerateArgs {
-            paths: vec![],
-            dry_run: false,
-            force: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
+        let args = GenerateArgs::default();
+        let config = Config::default();
 
-        let files = collect_files(&args, temp_dir.path(), temp_dir.path(), &factory);
+        let files = collect_files(&args, temp_dir.path(), temp_dir.path(), &factory, &config);
         assert_eq!(files.len(), 1);
         assert!(files[0].to_string_lossy().contains("main.py"));
     }
@@ -822,14 +822,11 @@ mod tests {
 
         let args = GenerateArgs {
             paths: vec![src_dir.clone()],
-            dry_run: false,
-            force: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
+            ..Default::default()
         };
+        let config = Config::default();
 
-        let files = collect_files(&args, temp_dir.path(), temp_dir.path(), &factory);
+        let files = collect_files(&args, temp_dir.path(), temp_dir.path(), &factory, &config);
         // Should only find files in src/
         assert_eq!(files.len(), 1);
         assert!(files[0].to_string_lossy().contains("main.ts"));
@@ -845,14 +842,11 @@ mod tests {
 
         let args = GenerateArgs {
             paths: vec![file_path.clone()],
-            dry_run: false,
-            force: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
+            ..Default::default()
         };
+        let config = Config::default();
 
-        let files = collect_files(&args, temp_dir.path(), temp_dir.path(), &factory);
+        let files = collect_files(&args, temp_dir.path(), temp_dir.path(), &factory, &config);
         assert_eq!(files.len(), 1);
         assert_eq!(files[0], file_path);
     }
@@ -899,12 +893,8 @@ mod tests {
         fs::write(temp_dir.path().join("main.ts"), "export const x = 1;").unwrap();
 
         let args = GenerateArgs {
-            paths: vec![],
             dry_run: true,
-            force: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
+            ..Default::default()
         };
 
         let result = run_generate(&args, temp_dir.path(), false);
@@ -921,14 +911,7 @@ mod tests {
         // Create a simple TypeScript file
         fs::write(temp_dir.path().join("main.ts"), "export const x = 1;").unwrap();
 
-        let args = GenerateArgs {
-            paths: vec![],
-            dry_run: false,
-            force: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
+        let args = GenerateArgs::default();
 
         let result = run_generate(&args, temp_dir.path(), false);
         assert!(result.is_ok());
@@ -950,14 +933,7 @@ mod tests {
         fs::create_dir(&ai_dir).unwrap();
         fs::write(ai_dir.join("main.ts.toon"), "existing content").unwrap();
 
-        let args = GenerateArgs {
-            paths: vec![],
-            dry_run: false,
-            force: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
+        let args = GenerateArgs::default();
 
         let result = run_generate(&args, temp_dir.path(), false);
         assert!(result.is_ok());
@@ -980,12 +956,8 @@ mod tests {
         fs::write(ai_dir.join("main.ts.toon"), "existing content").unwrap();
 
         let args = GenerateArgs {
-            paths: vec![],
-            dry_run: false,
             force: true,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
+            ..Default::default()
         };
 
         let result = run_generate(&args, temp_dir.path(), false);
@@ -1001,8 +973,8 @@ mod tests {
     fn test_run_generate_with_toon_comments() {
         let temp_dir = TempDir::new().unwrap();
 
-        // Create a TypeScript file with @toon comments
-        let source = r#"/** @toon
+        // Create a TypeScript file with @dose comments
+        let source = r#"/** @dose
 purpose: Main application entry point
 when-editing:
     - !Check all imports before modifying
@@ -1021,14 +993,7 @@ export function main() {
 "#;
         fs::write(temp_dir.path().join("main.ts"), source).unwrap();
 
-        let args = GenerateArgs {
-            paths: vec![],
-            dry_run: false,
-            force: false,
-            unsafe_follow: false,
-            token_warn: 500,
-            token_error: 1000,
-        };
+        let args = GenerateArgs::default();
 
         let result = run_generate(&args, temp_dir.path(), false);
         assert!(result.is_ok());
@@ -1038,5 +1003,35 @@ export function main() {
         assert!(toon_content.contains("Main application entry point"));
         assert!(toon_content.contains("when-editing:"));
         assert!(toon_content.contains("invariants:"));
+    }
+
+    #[test]
+    fn test_run_generate_clean_removes_stale_files() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create a TypeScript file
+        fs::write(temp_dir.path().join("main.ts"), "export const x = 1;").unwrap();
+
+        // Create existing .ai directory with a stale file
+        let ai_dir = temp_dir.path().join(".ai");
+        fs::create_dir(&ai_dir).unwrap();
+        fs::write(ai_dir.join("deleted.ts.toon"), "stale content").unwrap();
+        fs::write(ai_dir.join("main.ts.toon"), "existing content").unwrap();
+
+        let args = GenerateArgs {
+            clean: true,
+            ..Default::default()
+        };
+
+        let result = run_generate(&args, temp_dir.path(), false);
+        assert!(result.is_ok());
+
+        // Stale file should be removed
+        assert!(!ai_dir.join("deleted.ts.toon").exists());
+
+        // main.ts.toon should be regenerated
+        assert!(ai_dir.join("main.ts.toon").exists());
+        let content = fs::read_to_string(ai_dir.join("main.ts.toon")).unwrap();
+        assert!(content.contains("purpose:"));
     }
 }

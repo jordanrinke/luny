@@ -1,4 +1,4 @@
-purpose: the library crate root for luny, exposing the public API for use as both
-tokens: ~369
-exports[5]: cli(mod), commands(mod), formatter(mod), parser(mod), types(mod)
-imports[4]{from,items}: cli,Cli|Commands|GenerateArgs|StripArgs|ValidateArgs; formatter,format_toon|parse_toon; parser,LanguageParser|ParserFactory|ParseError; types,ASTInfo|CallInfo|CalledByInfo|ExportInfo|ExtractedComments|FunctionAnnotation|ImportInfo|SignatureInfo|ToonCommentBlock|ToonData|ValidationResult|WhenEditingItem
+purpose: the library crate root for luny, exposing the public API for use as both a CLI tool and a library. It re-exports key types and functions from all modules for convenient access by consumers.
+tokens: ~355
+exports[7]: cli(mod), commands(mod), config(mod), exclusion(mod), formatter(mod), parser(mod), types(mod)
+imports[6]{from,items}: cli,Cli|Commands|GenerateArgs|StripArgs|ValidateArgs; config,Config; exclusion,ExclusionConfig; formatter,format_toon|parse_toon; parser,LanguageParser|ParseError|ParserFactory; types,ASTInfo|CallInfo|CalledByInfo|ExportInfo|ExtractedComments|FunctionAnnotation|ImportInfo|SignatureInfo|ToonCommentBlock|ToonData|ValidationResult|WhenEditingItem

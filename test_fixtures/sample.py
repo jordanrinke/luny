@@ -1,4 +1,4 @@
-"""@toon
+"""@dose
 purpose: Sample Python fixture for testing the luny Python parser.
     This file contains various Python constructs including classes, functions,
     decorators, and type hints to verify extraction works correctly.

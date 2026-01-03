@@ -1,4 +1,4 @@
-/** @toon
+/** @dose
 purpose: Sample JavaScript fixture for testing both CommonJS and ES module patterns.
     This file demonstrates various export styles used in JavaScript codebases.
 

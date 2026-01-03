@@ -1,4 +1,4 @@
-//! @toon
+//! @dose
 //! purpose: This module parses TypeScript and JavaScript source files to extract AST
 //!     information including exports, imports, function calls, and type signatures.
 //!     It uses tree-sitter for robust parsing and handles both ES modules and CommonJS.
@@ -1122,8 +1122,8 @@ impl LanguageParser for TypeScriptParser {
         let calls = self.extract_calls(root, source, &imports);
         let signatures = self.extract_signatures(root, source, &exports);
 
-        // Calculate approximate tokens
-        let tokens = source.len() / 4;
+        // Calculate tokens using tiktoken
+        let tokens = super::tokens::count_tokens(source);
 
         Ok(ASTInfo {
             tokens,
@@ -1137,8 +1137,8 @@ impl LanguageParser for TypeScriptParser {
     fn extract_toon_comments(&self, source: &str) -> Result<ExtractedComments, ParseError> {
         let mut result = ExtractedComments::default();
 
-        // Find @toon block comments using regex (file-level, multi-line)
-        let block_pattern = Regex::new(r"/\*\*[\s\S]*?@toon[\s\S]*?\*/").unwrap();
+        // Find @dose block comments using regex (file-level, multi-line)
+        let block_pattern = Regex::new(r"/\*\*[\s\S]*?@dose[\s\S]*?\*/").unwrap();
 
         if let Some(mat) = block_pattern.find(source) {
             let comment = mat.as_str();
@@ -1158,12 +1158,12 @@ impl LanguageParser for TypeScriptParser {
                     .trim_end_matches("*/")
                     .trim();
 
-                // Remove @toon marker
+                // Remove @dose marker
                 let content = content
                     .lines()
                     .map(|line| {
                         let trimmed = line.trim().trim_start_matches('*').trim();
-                        if trimmed == "@toon" {
+                        if trimmed == "@dose" {
                             ""
                         } else {
                             trimmed
@@ -1176,10 +1176,10 @@ impl LanguageParser for TypeScriptParser {
             }
         }
 
-        // Find inline @toon comments (single-line annotations for specific functions)
-        // Pattern matches: /** @toon field: value */ or // @toon field: value
+        // Find inline @dose comments (single-line annotations for specific functions)
+        // Pattern matches: /** @dose field: value */ or // @dose field: value
         let inline_pattern = Regex::new(
-            r"(?:/\*\*\s*@toon\s+(invariant|gotcha|do-not|constraint|error-handling):\s*([^*]+)\s*\*/|//\s*@toon\s+(invariant|gotcha|do-not|constraint|error-handling):\s*(.+))"
+            r"(?:/\*\*\s*@dose\s+(invariant|gotcha|do-not|constraint|error-handling):\s*([^*]+)\s*\*/|//\s*@dose\s+(invariant|gotcha|do-not|constraint|error-handling):\s*(.+))"
         ).unwrap();
 
         // Collect all inline annotations with their positions
@@ -1262,17 +1262,59 @@ impl LanguageParser for TypeScriptParser {
     fn strip_toon_comments(&self, source: &str, toon_path: &str) -> Result<String, ParseError> {
         let mut result = source.to_string();
 
-        // Replace block @toon comments with stub
-        let block_pattern = Regex::new(r"/\*\*[\s\S]*?@toon[\s\S]*?\*/").unwrap();
+        // Replace block @dose comments with stub
+        let block_pattern = Regex::new(r"/\*\*[\s\S]*?@dose[\s\S]*?\*/").unwrap();
         result = block_pattern
-            .replace_all(&result, &format!("// @toon → {}", toon_path))
+            .replace_all(&result, &format!("// @dose -> {}", toon_path))
             .to_string();
 
-        // Remove single-line @toon comments
-        let single_pattern = Regex::new(r"//\s*@toon:[^\n]*\n?").unwrap();
+        // Remove single-line @dose comments
+        let single_pattern = Regex::new(r"//\s*@dose:[^\n]*\n?").unwrap();
         result = single_pattern.replace_all(&result, "").to_string();
 
         Ok(result)
+    }
+
+    fn get_string_ranges(&self, source: &str) -> Result<Vec<(usize, usize)>, ParseError> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
+            .map_err(|e| ParseError::ParseError(e.to_string()))?;
+
+        let tree = parser
+            .parse(source, None)
+            .ok_or_else(|| ParseError::ParseError("Failed to parse source".to_string()))?;
+
+        let mut ranges = Vec::new();
+        let mut cursor = tree.walk();
+        collect_string_ranges(&mut cursor, source.as_bytes(), &mut ranges);
+        Ok(ranges)
+    }
+}
+
+/// Collect byte ranges of string literals recursively
+fn collect_string_ranges(
+    cursor: &mut tree_sitter::TreeCursor,
+    _source: &[u8],
+    ranges: &mut Vec<(usize, usize)>,
+) {
+    loop {
+        let node = cursor.node();
+        let kind = node.kind();
+
+        // TypeScript/JavaScript string types
+        if kind == "string" || kind == "template_string" || kind == "string_fragment" {
+            ranges.push((node.start_byte(), node.end_byte()));
+        }
+
+        if cursor.goto_first_child() {
+            collect_string_ranges(cursor, _source, ranges);
+            cursor.goto_parent();
+        }
+
+        if !cursor.goto_next_sibling() {
+            break;
+        }
     }
 }
 
@@ -1357,7 +1399,7 @@ mod tests {
         let stripped = parser
             .strip_toon_comments(TS_FIXTURE, "sample.ts.toon")
             .unwrap();
-        assert!(stripped.contains("// @toon"));
+        assert!(stripped.contains("// @dose"));
         assert!(stripped.contains("sample.ts.toon"));
     }
 }

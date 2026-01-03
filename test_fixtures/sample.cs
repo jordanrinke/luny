@@ -1,4 +1,4 @@
-/** @toon
+/** @dose
 purpose: Sample C# fixture for testing the luny C# parser.
     This file contains various C# constructs including classes, interfaces,
     records, and async patterns to verify extraction works correctly.

@@ -1,5 +1,5 @@
 =begin
-@toon
+@dose
 purpose: Sample Ruby fixture for testing the luny Ruby parser.
     This file contains various Ruby constructs including classes, modules,
     methods, and metaprogramming patterns to verify extraction works correctly.

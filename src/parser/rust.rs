@@ -1,4 +1,4 @@
-//! @toon
+//! @dose
 //! purpose: This module parses Rust source files to extract pub items including functions,
 //!     structs, enums, traits, type aliases, constants, statics, modules, and macros.
 //!     It uses tree-sitter for robust parsing and respects Rust's visibility modifiers.
@@ -19,7 +19,7 @@
 //!
 //! gotchas:
 //!     - Rust uses explicit pub modifier for visibility; default is private
-//!     - The @toon block can use //! or /*! doc comment syntax
+//!     - The @dose block can use //! or /*! doc comment syntax
 //!     - Use statements can have complex nested patterns with aliases
 //!     - Impl blocks contain methods but the impl itself is not an export
 //!
@@ -740,7 +740,7 @@ impl LanguageParser for RustParser {
             .ok_or_else(|| ParseError::ParseError("Failed to parse Rust source".to_string()))?;
 
         let root = tree.root_node();
-        let tokens = source.len() / 4;
+        let tokens = super::tokens::count_tokens(source);
 
         let exports = self.extract_exports(root, source);
         let imports = self.extract_imports(root, source);
@@ -759,8 +759,8 @@ impl LanguageParser for RustParser {
     fn extract_toon_comments(&self, source: &str) -> Result<ExtractedComments, ParseError> {
         let mut comments = ExtractedComments::default();
 
-        // Match /*! @toon ... */ or /** @toon ... */ block comments
-        let block_pattern = Regex::new(r"/\*[!\*]?\s*@toon\b([\s\S]*?)\*/").unwrap();
+        // Match /*! @dose ... */ or /** @dose ... */ block comments
+        let block_pattern = Regex::new(r"/\*[!\*]?\s*@dose\b([\s\S]*?)\*/").unwrap();
 
         if let Some(captures) = block_pattern.captures(source) {
             if let Some(content) = captures.get(1) {
@@ -768,8 +768,8 @@ impl LanguageParser for RustParser {
             }
         }
 
-        // Match //! @toon or /// @toon doc comments
-        let doc_pattern = Regex::new(r"(?m)^[ \t]*//[!/]\s*@toon\b(.*)$").unwrap();
+        // Match //! @dose or /// @dose doc comments
+        let doc_pattern = Regex::new(r"(?m)^[ \t]*//[!/]\s*@dose\b(.*)$").unwrap();
         if let Some(captures) = doc_pattern.captures(source) {
             if let Some(content) = captures.get(1) {
                 // Collect subsequent doc comment lines
@@ -801,19 +801,59 @@ impl LanguageParser for RustParser {
     fn strip_toon_comments(&self, source: &str, toon_path: &str) -> Result<String, ParseError> {
         let mut result = source.to_string();
 
-        // Replace block @toon comments with reference
-        let block_pattern = Regex::new(r"/\*[!\*]?\s*@toon\b[\s\S]*?\*/\s*\n?").unwrap();
+        // Replace block @dose comments with reference
+        let block_pattern = Regex::new(r"/\*[!\*]?\s*@dose\b[\s\S]*?\*/\s*\n?").unwrap();
         result = block_pattern
-            .replace_all(&result, &format!("// @toon -> {}\n", toon_path))
+            .replace_all(&result, &format!("// @dose -> {}\n", toon_path))
             .to_string();
 
-        // Remove doc comment @toon lines
-        let doc_pattern = Regex::new(r"(?m)^[ \t]*//[!/]\s*@toon[^\n]*\n?").unwrap();
+        // Remove doc comment @dose lines
+        let doc_pattern = Regex::new(r"(?m)^[ \t]*//[!/]\s*@dose[^\n]*\n?").unwrap();
         result = doc_pattern
-            .replace_all(&result, &format!("// @toon -> {}\n", toon_path))
+            .replace_all(&result, &format!("// @dose -> {}\n", toon_path))
             .to_string();
 
         Ok(result)
+    }
+
+    fn get_string_ranges(&self, source: &str) -> Result<Vec<(usize, usize)>, ParseError> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_rust::LANGUAGE.into())
+            .map_err(|e| ParseError::ParseError(e.to_string()))?;
+
+        let tree = parser
+            .parse(source, None)
+            .ok_or_else(|| ParseError::ParseError("Failed to parse source".to_string()))?;
+
+        let mut ranges = Vec::new();
+        collect_string_ranges_rs(&mut tree.walk(), &mut ranges);
+        Ok(ranges)
+    }
+}
+
+fn collect_string_ranges_rs(
+    cursor: &mut tree_sitter::TreeCursor,
+    ranges: &mut Vec<(usize, usize)>,
+) {
+    loop {
+        let node = cursor.node();
+        let kind = node.kind();
+        // Rust has string_literal, raw_string_literal, byte_string_literal, char_literal
+        if kind == "string_literal"
+            || kind == "raw_string_literal"
+            || kind == "byte_string_literal"
+            || kind == "char_literal"
+        {
+            ranges.push((node.start_byte(), node.end_byte()));
+        }
+        if cursor.goto_first_child() {
+            collect_string_ranges_rs(cursor, ranges);
+            cursor.goto_parent();
+        }
+        if !cursor.goto_next_sibling() {
+            break;
+        }
     }
 }
 
@@ -901,6 +941,6 @@ mod tests {
         let stripped = parser
             .strip_toon_comments(RS_FIXTURE, "sample.rs.toon")
             .unwrap();
-        assert!(stripped.starts_with("// @toon -> sample.rs.toon"));
+        assert!(stripped.starts_with("// @dose -> sample.rs.toon"));
     }
 }

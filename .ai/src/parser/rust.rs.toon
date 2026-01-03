@@ -1,8 +1,8 @@
-purpose: This module parses Rust source files to extract pub items including functions,
-tokens: ~9283
+purpose: This module parses Rust source files to extract pub items including functions, structs, enums, traits, type aliases, constants, statics, modules, and macros. It uses tree-sitter for robust parsing and respects Rust's visibility modifiers.
+tokens: ~6683
 exports[3]: RustParser(struct), new(method(RustParser)), new(fn)
 signatures[2]:
   RustParser(struct): { }
   new(fn): () Self
 imports[7]{from,items}: crate::parser,toon_comment|LanguageParser|ParseError; crate::types,ASTInfo|CallInfo|ExportInfo|ExtractedComments|ImportInfo|SignatureInfo; regex,Regex; std::collections,HashMap|HashSet; std::path,Path; tree_sitter,Node|Parser; super::*,super::*
-calls[6]{target,methods}: std::path,new; crate::types,default; regex,new|new(r"/\*[!\*]?\s*@toon\b([\s\S]*?)\*/").unwrap|new(r"(?m)^[ \t]*//[!/]\s*@toon[^\n]*\n?").unwrap|new(r"(?m)^[ \t]*//[!/](.*)$").unwrap|new(r"(?m)^[ \t]*//[!/]\s*@toon\b(.*)$").unwrap|new(r"/\*[!\*]?\s*@toon\b[\s\S]*?\*/\s*\n?").unwrap; crate::parser,parse_toon_block|ParseError; std::collections,new; tree_sitter,new
+calls[6]{target,methods}: std::path,new; crate::parser,ParseError|parse_toon_block; tree_sitter,new; std::collections,new; crate::types,default; regex,new|new(r"(?m)^[ \t]*//[!/]\s*@dose\b(.*)$").unwrap|new(r"(?m)^[ \t]*//[!/](.*)$").unwrap|new(r"/\*[!\*]?\s*@dose\b([\s\S]*?)\*/").unwrap|new(r"/\*[!\*]?\s*@dose\b[\s\S]*?\*/\s*\n?").unwrap|new(r"(?m)^[ \t]*//[!/]\s*@dose[^\n]*\n?").unwrap

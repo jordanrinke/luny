@@ -25,10 +25,10 @@ jobs:
             os: ubuntu-latest
             archive: tar.gz
           - target: x86_64-apple-darwin
-            os: macos-latest
+            os: macos-latest  # Cross-compile on Apple Silicon
             archive: tar.gz
           - target: aarch64-apple-darwin
-            os: macos-latest
+            os: macos-latest  # Native Apple Silicon build
             archive: tar.gz
           - target: x86_64-pc-windows-msvc
             os: windows-latest
@@ -46,7 +46,7 @@ jobs:
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
       - name: Install musl tools
         if: matrix.target == 'x86_64-unknown-linux-musl'
@@ -56,6 +56,17 @@ jobs:
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
+        env:
+          # Cross-compilation for aarch64-linux-gnu
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          CXX_aarch64_unknown_linux_gnu: aarch64-linux-gnu-g++
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          # musl target uses musl-gcc
+          CC_x86_64_unknown_linux_musl: musl-gcc
+          # Cross-compile x86_64 macOS on Apple Silicon
+          CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER: clang
+          CC_x86_64_apple_darwin: clang
+          CFLAGS_x86_64_apple_darwin: -target x86_64-apple-darwin
 
       - name: Package (Unix)
         if: matrix.os != 'windows-latest'

@@ -1,5 +1,5 @@
-purpose: Sample JavaScript fixture for testing both CommonJS and ES module patterns.
-tokens: ~595
+purpose: Sample JavaScript fixture for testing both CommonJS and ES module patterns. This file demonstrates various export styles used in JavaScript codebases.
+tokens: ~534
 exports[8]: Logger(class), formatDate(fn), fetchData(fn), debounce(fn), VERSION(const), DEFAULT_PORT(const), config(const), startServer(fn)
 signatures[4]:
   formatDate(fn): (date)

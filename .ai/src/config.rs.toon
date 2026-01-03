@@ -1,0 +1,15 @@
+purpose: Configuration file parsing for luny.toml. Handles exclusion patterns, default token thresholds, and per-pattern threshold overrides.
+tokens: ~2233
+exports[13]: Config(struct), TokenConfig(struct), ThresholdOverride(struct), ThresholdMatcher(struct), FileThresholds(struct), new(method(ThresholdMatcher)), get_thresholds(method(ThresholdMatcher)), new(fn), get_thresholds(fn), load(method(Config)), threshold_matcher(method(Config)), load(fn), threshold_matcher(fn)
+signatures[9]:
+  Config(struct): { exclude: Vec<String>, clean: bool, tokens: TokenConfig }
+  TokenConfig(struct): { warn: usize, error: usize, overrides: Vec<ThresholdOverride> }
+  ThresholdOverride(struct): { pattern: String, warn: Option<usize>, error: Option<usize> }
+  ThresholdMatcher(struct): { overrides: Vec<(GlobSet, Option<usize>, Option<usize>)>, default_warn: usize, default_error: usize }
+  FileThresholds(struct): { warn: Option<usize>, error: Option<usize> }
+  new(fn): (config: &TokenConfig) Self
+  get_thresholds(fn): (&self, relative_path: &Path) FileThresholds
+  load(fn): (root: &Path) Self
+  threshold_matcher(fn): (&self) ThresholdMatcher
+imports[6]{from,items}: globset,Glob|GlobSet|GlobSetBuilder; serde,Deserialize; std,fs; std::path,Path; super::*,super::*; tempfile,TempDir
+calls[4]{target,methods}: globset,new; std::path,new; std,write(temp_dir.path().join("luny.toml"), config_content).unwrap|write|read_to_string; tempfile,new().unwrap|new

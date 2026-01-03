@@ -1,7 +1,7 @@
-purpose: This module implements the strip command that removes @toon comment blocks
-tokens: ~4422
+purpose: This module implements the strip command that removes @dose comment blocks from source files and replaces them with minimal stub references. This reduces code noise while maintaining links to the full documentation.
+tokens: ~5071
 exports[1]: run_strip(fn)
 signatures[1]:
   run_strip(fn): (args: &StripArgs, root: &Path, _verbose: bool) Result<()>
 imports[10]{from,items}: crate::cli,StripArgs; crate::parser,ParserFactory; anyhow,Context|Result; std,fs; std::io,self|Read|Write; std::path,Path; super::*,super::*; std,fs; std::path,PathBuf; tempfile,TempDir
-calls[4]{target,methods}: crate::parser,new; tempfile,new().unwrap|new; std::path,from; std,create_dir_all(&subdir).unwrap|write|write(&input_path, source).unwrap|write(&output_path, &stripped).context|read_to_string(&path).context|read_to_string(&output_path).unwrap|create_dir(&subdir).unwrap|create_dir|create_dir_all|write(subdir.join("test.ts"), source).unwrap|read_to_string
+calls[4]{target,methods}: tempfile,new|new().unwrap; crate::parser,new; std::path,from; std,write(subdir.join("test.ts"), source).unwrap|write(&input_path, source).unwrap|create_dir|read_to_string|read_to_string(&output_path).unwrap|create_dir_all(&subdir).unwrap|read_to_string(&path).context|write|create_dir(&subdir).unwrap|write(&output_path, &stripped).context|create_dir_all

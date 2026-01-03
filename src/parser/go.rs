@@ -1,4 +1,4 @@
-//! @toon
+//! @dose
 //! purpose: This module parses Go source files to extract exported types, functions,
 //!     methods, constants, and variables. It uses tree-sitter for robust parsing and
 //!     follows Go's capitalization convention for determining exports.
@@ -19,7 +19,7 @@
 //!
 //! gotchas:
 //!     - Go has no explicit export keyword; capitalization determines visibility
-//!     - The @toon block uses /* */ block comments, not // single-line comments
+//!     - The @dose block uses /* */ block comments, not // single-line comments
 //!     - Receiver types may be pointer types (prefixed with *)
 //!     - Const and var declarations can declare multiple identifiers at once
 //!
@@ -587,7 +587,7 @@ impl LanguageParser for GoParser {
             .ok_or_else(|| ParseError::ParseError("Failed to parse Go source".to_string()))?;
 
         let root = tree.root_node();
-        let tokens = source.len() / 4;
+        let tokens = super::tokens::count_tokens(source);
 
         let exports = self.extract_exports(root, source);
         let imports = self.extract_imports(root, source);
@@ -606,8 +606,8 @@ impl LanguageParser for GoParser {
     fn extract_toon_comments(&self, source: &str) -> Result<ExtractedComments, ParseError> {
         let mut comments = ExtractedComments::default();
 
-        // Match /* @toon ... */ block comments
-        let block_pattern = Regex::new(r"/\*\s*@toon\b([\s\S]*?)\*/").unwrap();
+        // Match /* @dose ... */ block comments
+        let block_pattern = Regex::new(r"/\*\s*@dose\b([\s\S]*?)\*/").unwrap();
 
         if let Some(captures) = block_pattern.captures(source) {
             if let Some(content) = captures.get(1) {
@@ -615,8 +615,8 @@ impl LanguageParser for GoParser {
             }
         }
 
-        // Match // @toon: key: value single-line comments
-        let single_pattern = Regex::new(r"//\s*@toon:\s*(\w+):\s*(.+)").unwrap();
+        // Match // @dose: key: value single-line comments
+        let single_pattern = Regex::new(r"//\s*@dose:\s*(\w+):\s*(.+)").unwrap();
         for cap in single_pattern.captures_iter(source) {
             if let (Some(key), Some(value)) = (cap.get(1), cap.get(2)) {
                 let block = comments
@@ -636,17 +636,53 @@ impl LanguageParser for GoParser {
     fn strip_toon_comments(&self, source: &str, toon_path: &str) -> Result<String, ParseError> {
         let mut result = source.to_string();
 
-        // Replace block @toon comments with reference
-        let block_pattern = Regex::new(r"/\*\s*@toon\b[\s\S]*?\*/\s*\n?").unwrap();
+        // Replace block @dose comments with reference
+        let block_pattern = Regex::new(r"/\*\s*@dose\b[\s\S]*?\*/\s*\n?").unwrap();
         result = block_pattern
-            .replace_all(&result, &format!("// @toon -> {}\n", toon_path))
+            .replace_all(&result, &format!("// @dose -> {}\n", toon_path))
             .to_string();
 
-        // Remove single-line @toon comments
-        let single_pattern = Regex::new(r"//\s*@toon:[^\n]*\n?").unwrap();
+        // Remove single-line @dose comments
+        let single_pattern = Regex::new(r"//\s*@dose:[^\n]*\n?").unwrap();
         result = single_pattern.replace_all(&result, "").to_string();
 
         Ok(result)
+    }
+
+    fn get_string_ranges(&self, source: &str) -> Result<Vec<(usize, usize)>, ParseError> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_go::LANGUAGE.into())
+            .map_err(|e| ParseError::ParseError(e.to_string()))?;
+
+        let tree = parser
+            .parse(source, None)
+            .ok_or_else(|| ParseError::ParseError("Failed to parse source".to_string()))?;
+
+        let mut ranges = Vec::new();
+        collect_string_ranges_go(&mut tree.walk(), &mut ranges);
+        Ok(ranges)
+    }
+}
+
+fn collect_string_ranges_go(
+    cursor: &mut tree_sitter::TreeCursor,
+    ranges: &mut Vec<(usize, usize)>,
+) {
+    loop {
+        let node = cursor.node();
+        let kind = node.kind();
+        // Go has interpreted_string_literal and raw_string_literal
+        if kind == "interpreted_string_literal" || kind == "raw_string_literal" {
+            ranges.push((node.start_byte(), node.end_byte()));
+        }
+        if cursor.goto_first_child() {
+            collect_string_ranges_go(cursor, ranges);
+            cursor.goto_parent();
+        }
+        if !cursor.goto_next_sibling() {
+            break;
+        }
     }
 }
 
@@ -739,6 +775,6 @@ mod tests {
         let stripped = parser
             .strip_toon_comments(GO_FIXTURE, "sample.go.toon")
             .unwrap();
-        assert!(stripped.starts_with("// @toon -> sample.go.toon"));
+        assert!(stripped.starts_with("// @dose -> sample.go.toon"));
     }
 }

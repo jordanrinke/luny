@@ -1,4 +1,4 @@
-//! Shared @toon comment parsing logic used by all language parsers.
+//! Shared @dose comment parsing logic used by all language parsers.
 //!
 //! This module extracts the common parsing code that was duplicated across
 //! TypeScript, Python, Ruby, C#, Go, and Rust parsers.
@@ -47,7 +47,7 @@ fn parse_inline_items(s: &str) -> Vec<String> {
         .collect()
 }
 
-/// Parse @toon block content into a ToonCommentBlock.
+/// Parse @dose block content into a ToonCommentBlock.
 /// Supports both multi-line format with - prefixes and compact semicolon-separated format.
 pub fn parse_toon_block(content: &str) -> ToonCommentBlock {
     let mut block = ToonCommentBlock::default();

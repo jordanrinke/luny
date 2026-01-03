@@ -1,0 +1,7 @@
+purpose: Token counting utility using tiktoken for accurate LLM token estimation.
+tokens: ~617
+exports[1]: count_tokens(fn)
+signatures[1]:
+  count_tokens(fn): (text: &str) usize
+imports[3]{from,items}: once_cell::sync,Lazy; tiktoken_rs,CoreBPE; super::*,super::*
+calls[1]{target,methods}: once_cell::sync,new

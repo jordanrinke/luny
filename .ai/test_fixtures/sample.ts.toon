@@ -1,7 +1,7 @@
-purpose: Sample TypeScript fixture for testing the luny parser.
-tokens: ~560
-exports[10]: UserId(type), Result(type), UserConfig(interface), Status(enum), UserService(class), validateUser(fn), saveUser(fn), createUser(fn), DEFAULT_CONFIG(const), defaultExport(const)
-signatures[7]:
+purpose: Sample TypeScript fixture for testing the luny parser. This file contains various TypeScript constructs to verify extraction works correctly.
+tokens: ~945
+exports[15]: UserId(type), Result(type), UserConfig(interface), Status(enum), UserService(class), validateUser(fn), saveUser(fn), createUser(fn), DEFAULT_CONFIG(const), defaultExport(const), memo(fn), MyComponent(component), ThemeContext(context), MemoizedComponent(component), ReactMemoComponent(component)
+signatures[8]:
   UserId(type): string
   Result(type): <T, E = Error> = { ok: true; value: T } | { ok: false; error: E }
   UserConfig(interface): { id: UserId; name: string; settings: Record<string, unknown> }
@@ -9,6 +9,7 @@ signatures[7]:
   saveUser(fn): (user: UserConfig) : Promise<void>
   createUser(fn): (name: string) : UserConfig => ...
   DEFAULT_CONFIG(const): UserConfig
+  MyComponent(component): FC<{ name: string }>
 when-editing: !Keep all export types represented for comprehensive testing; Maintain the mix of sync and async functions
 invariants: All exported items must have clear, testable names; Import statements should cover all supported patterns
 do-not: Remove any exports without updating corresponding tests

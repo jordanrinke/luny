@@ -1,0 +1,10 @@
+purpose: This module provides file exclusion functionality for directory walking, supporting gitignore files and patterns from luny.toml/CLI --exclude.
+tokens: ~2303
+exports[4]: ExclusionConfig(struct), build_walker(fn), build_exclude_globset(fn), is_default_excluded_dir(fn)
+signatures[4]:
+  ExclusionConfig(struct): { patterns: Vec<String>, respect_gitignore: bool }
+  build_walker(fn): (root: &Path, config: &ExclusionConfig) WalkBuilder
+  build_exclude_globset(fn): (patterns: &[String]) Option<GlobSet>
+  is_default_excluded_dir(fn): (name: &str) bool
+imports[7]{from,items}: globset,Glob|GlobSet|GlobSetBuilder; ignore::overrides,OverrideBuilder; ignore,WalkBuilder; std::path,Path; super::*,super::*; std,fs; tempfile,TempDir
+calls[5]{target,methods}: globset,new; ignore::overrides,new; ignore,new; tempfile,new|new().unwrap; std,write(temp_dir.path().join("docs/readme.md"), "content").unwrap|write(temp_dir.path().join("main.test.ts"), "content").unwrap|write(temp_dir.path().join("ignored_dir/file.ts"), "content").unwrap|write(temp_dir.path().join("main.ts"), "content").unwrap|write|write(temp_dir.path().join("test.ignored"), "content").unwrap|create_dir|write(temp_dir.path().join(".gitignore"), "ignored_dir/").unwrap|write(temp_dir.path().join(".gitignore"), "ignored_dir/\n*.ignored").unwrap|create_dir(temp_dir.path().join("ignored_dir")).unwrap|create_dir(temp_dir.path().join("docs")).unwrap|create_dir(temp_dir.path().join(".git")).unwrap

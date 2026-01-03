@@ -1,8 +1,8 @@
-purpose: This module parses Go source files to extract exported types, functions,
-tokens: ~7869
+purpose: This module parses Go source files to extract exported types, functions, methods, constants, and variables. It uses tree-sitter for robust parsing and follows Go's capitalization convention for determining exports.
+tokens: ~5414
 exports[3]: GoParser(struct), new(method(GoParser)), new(fn)
 signatures[2]:
   GoParser(struct): { }
   new(fn): () Self
 imports[7]{from,items}: crate::parser,toon_comment|LanguageParser|ParseError; crate::types,ASTInfo|CallInfo|ExportInfo|ExtractedComments|ImportInfo|SignatureInfo|ToonCommentBlock; regex,Regex; std::collections,HashMap|HashSet; std::path,Path; tree_sitter,Node|Parser; super::*,super::*
-calls[6]{target,methods}: crate::types,default; regex,new(r"/\*\s*@toon\b([\s\S]*?)\*/").unwrap|new|new(r"//\s*@toon:\s*(\w+):\s*(.+)").unwrap|new(r"/\*\s*@toon\b[\s\S]*?\*/\s*\n?").unwrap|new(r"//\s*@toon:[^\n]*\n?").unwrap; std::path,new; std::collections,new; tree_sitter,new; crate::parser,ParseError|parse_toon_block|save_section
+calls[6]{target,methods}: std::path,new; regex,new(r"/\*\s*@dose\b[\s\S]*?\*/\s*\n?").unwrap|new(r"//\s*@dose:\s*(\w+):\s*(.+)").unwrap|new|new(r"//\s*@dose:[^\n]*\n?").unwrap|new(r"/\*\s*@dose\b([\s\S]*?)\*/").unwrap; std::collections,new; tree_sitter,new; crate::types,default; crate::parser,save_section|parse_toon_block|ParseError

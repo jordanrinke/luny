@@ -47,7 +47,7 @@ luny generate src/
 # Validate .toon files against source
 luny validate
 
-# Strip @toon comments when reading into LLM (saves tokens)
+# Strip @dose comments when reading into LLM (saves tokens)
 luny strip src/main.ts
 ```
 
@@ -69,7 +69,7 @@ Extracted automatically from AST analysis:
 | `called-by` | Functions that call into this file |
 | `signatures` | Type signatures for exports |
 
-### Semantic Fields (You write these in @toon comments)
+### Semantic Fields (You write these in @dose comments)
 
 Human knowledge that can't be extracted from code:
 
@@ -87,14 +87,14 @@ Human knowledge that can't be extracted from code:
 | `common-mistakes` | Historical bugs to avoid | Optional |
 | `change-impacts` | Non-obvious blast radius | Optional |
 
-## Writing @toon Comments
+## Writing @dose Comments
 
-Add `@toon` blocks to your source files. Luny extracts the semantic content and combines it with AST data.
+Add `@dose` blocks to your source files. Luny extracts the semantic content and combines it with AST data.
 
 ### TypeScript/JavaScript
 
 ```typescript
-/** @toon
+/** @dose
 purpose: Auth context managing session state, token refresh, and platform storage.
 
 when-editing:
@@ -126,12 +126,12 @@ export function AuthProvider({ children }: Props) {
   // ...
 }
 
-/** @toon invariant: caller must check isAuthenticated before calling */
+/** @dose invariant: caller must check isAuthenticated before calling */
 export async function refreshToken(): Promise<void> {
   // ...
 }
 
-/** @toon gotcha: returns null during SSR, not undefined */
+/** @dose gotcha: returns null during SSR, not undefined */
 export function useAuth(): AuthContextValue | null {
   // ...
 }
@@ -140,7 +140,7 @@ export function useAuth(): AuthContextValue | null {
 ### Python
 
 ```python
-"""@toon
+"""@dose
 purpose: Database connection pool with automatic reconnection and health checks.
 
 when-editing:
@@ -163,11 +163,11 @@ gotchas:
 class ConnectionPool:
     # ...
 
-    # @toon invariant: always returns a valid connection or raises
+    # @dose invariant: always returns a valid connection or raises
     async def acquire(self) -> Connection:
         # ...
 
-    # @toon gotcha: must be called even if acquire() raised
+    # @dose gotcha: must be called even if acquire() raised
     async def release(self, conn: Connection) -> None:
         # ...
 ```
@@ -175,7 +175,7 @@ class ConnectionPool:
 ### Rust
 
 ```rust
-//! @toon
+//! @dose
 //! purpose: Thread-safe LRU cache with TTL support.
 //!
 //! when-editing:
@@ -199,12 +199,12 @@ pub struct Cache<K, V> {
 }
 
 impl<K, V> Cache<K, V> {
-    /// @toon invariant: returns None for expired entries, never stale data
+    /// @dose invariant: returns None for expired entries, never stale data
     pub fn get(&self, key: &K) -> Option<V> {
         // ...
     }
 
-    /// @toon gotcha: overwrites existing entry without returning old value
+    /// @dose gotcha: overwrites existing entry without returning old value
     pub fn insert(&mut self, key: K, value: V, ttl: Duration) {
         // ...
     }
@@ -243,7 +243,7 @@ fn:useAuth: gotchas: returns null during SSR, not undefined
 gotchas: isWeb check uses typeof window - breaks in SSR; Don't destructure useAuth() at module level
 ```
 
-Note the `fn:` prefixed lines show per-function annotations from inline `@toon` comments.
+Note the `fn:` prefixed lines show per-function annotations from inline `@dose` comments.
 
 ## Commands
 
@@ -269,7 +269,7 @@ luny validate --strict     # Treat warnings as errors
 
 ### `luny strip`
 
-Remove `@toon` comments when feeding source to an LLM. Since the LLM already has semantic context from the `.toon` file, the embedded comments are redundant—stripping them saves tokens.
+Remove `@dose` comments when feeding source to an LLM. Since the LLM already has semantic context from the `.toon` file, the embedded comments are redundant—stripping them saves tokens.
 
 ```bash
 luny strip <FILE>              # Output to stdout
@@ -283,13 +283,13 @@ luny strip - --ext ts          # Read from stdin
 
 | Language   | Extensions      | Comment Syntax |
 |------------|-----------------|----------------|
-| TypeScript | `.ts`, `.tsx`   | `/** @toon */` |
-| JavaScript | `.js`, `.jsx`   | `/** @toon */` |
-| Python     | `.py`           | `"""@toon"""` or `# @toon` |
-| Ruby       | `.rb`           | `# @toon` |
-| C#         | `.cs`           | `/** @toon */` or `/// @toon` |
-| Go         | `.go`           | `/* @toon */` |
-| Rust       | `.rs`           | `/*! @toon */` or `//! @toon` |
+| TypeScript | `.ts`, `.tsx`   | `/** @dose */` |
+| JavaScript | `.js`, `.jsx`   | `/** @dose */` |
+| Python     | `.py`           | `"""@dose"""` or `# @dose` |
+| Ruby       | `.rb`           | `# @dose` |
+| C#         | `.cs`           | `/** @dose */` or `/// @dose` |
+| Go         | `.go`           | `/* @dose */` |
+| Rust       | `.rs`           | `/*! @dose */` or `//! @dose` |
 
 ## Token Budgets
 
@@ -312,7 +312,7 @@ make install    # Install to ~/.cargo/bin
 
 ## MSRV (Minimum Supported Rust Version)
 
-Luny's MSRV is **Rust 1.80** (enforced via `rust-version = "1.80"` in `Cargo.toml` and checked in CI).
+Luny's MSRV is **Rust 1.85** (enforced via `rust-version = "1.85"` in `Cargo.toml` and checked in CI).
 
 ## References
 

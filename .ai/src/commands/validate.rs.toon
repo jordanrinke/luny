@@ -1,19 +1,11 @@
-purpose: This module implements the validate command that checks .toon files for
-tokens: ~6798
+purpose: This module implements the validate command that checks .toon files for correctness and consistency with their source files. It verifies exports match, token counts are within limits, and required fields are present.
+tokens: ~5957
 exports[1]: run_validate(fn)
 signatures[1]:
   run_validate(fn): (args: &ValidateArgs, root: &Path, verbose: bool) Result<()>
-imports[11]{from,items}: crate::cli,ValidateArgs; crate::formatter,format_toon|parse_toon; crate::parser,ParserFactory; crate::types,ToonData|ValidationResult; anyhow,Context|Result; std,fs; std::path,Path|PathBuf; walkdir,DirEntry|WalkDir; super::*,super::*; std,fs; tempfile,TempDir
-calls[5]{target,methods}: crate::parser,new; tempfile,new|new().unwrap; crate::types,new; walkdir,new(&full_path)
-            .follow_links(true)
-            .into_iter()
-            .filter_entry(|e| {
-                !is_excluded_dir(e) && is_allowed_symlink_target(e, &root_canon, args.unsafe_follow)
-            })
-            .filter_map|new(&full_path)
-            .follow_links(true)
-            .into_iter|new(&full_path)
-            .follow_links(true)
-            .into_iter()
-            .filter_entry|new|new(&full_path)
-            .follow_links; std,create_dir|read_to_string(toon_path).context|create_dir_all|create_dir(temp_dir.path().join(".ai")).unwrap|write(temp_dir.path().join("test.ts"), "export const x = 1;").unwrap|create_dir_all(&ai_src).unwrap|create_dir_all(&ai_lib).unwrap|create_dir(temp_dir.path().join("src")).unwrap|write(temp_dir.path().join(".ai/test.ts.toon"), toon_content).unwrap|write(temp_dir.path().join("lib/utils.ts"), "export const y = 2;").unwrap|write(ai_lib.join("missing.ts.toon"), "purpose: Missing\ntokens: ~50\nexports[0]:").unwrap|create_dir_all(&ai_nested).unwrap|write(temp_dir.path().join("test.ts"), source).unwrap|create_dir_all(&src_nested).unwrap|write(src_nested.join("Button.tsx"), "export function Button() {}").unwrap|write(ai_src.join("main.ts.toon"), toon_content).unwrap|write(ai_nested.join("Button.tsx.toon"), toon_content).unwrap|write|read_to_string(&source_path).context|write(toon_path, content).context|create_dir_all(parent).context|read_to_string|create_dir(temp_dir.path().join("lib")).unwrap|write(temp_dir.path().join("src/main.ts"), "export const x = 1;").unwrap|write(temp_dir.path().join(".ai/missing.ts.toon"), toon_content).unwrap
+imports[14]{from,items}: crate::cli,ValidateArgs; crate::config,Config|ThresholdMatcher; crate::exclusion,build_exclude_globset|build_walker; crate::formatter,format_toon|parse_toon; crate::parser,ParserFactory; crate::types,ToonData|ValidationResult; anyhow,Context|Result; std,fs; std::path,Path|PathBuf; super::*,super::*; std,fs; tempfile,TempDir; crate::config,TokenConfig; crate::config,TokenConfig
+calls[6]{target,methods}: std,create_dir_all(&src_nested).unwrap|write(temp_dir.path().join(".ai/missing.ts.toon"), toon_content).unwrap|create_dir_all(&ai_src).unwrap|read_to_string|create_dir(temp_dir.path().join("lib")).unwrap|create_dir_all(parent).context|create_dir_all|read_to_string(toon_path).context|write(toon_path, content).context|create_dir|write(temp_dir.path().join("test.ts"), "export const x = 1;").unwrap|create_dir_all(&ai_lib).unwrap|create_dir_all(&ai_nested).unwrap|write(temp_dir.path().join("lib/utils.ts"), "export const y = 2;").unwrap|write(src_nested.join("Button.tsx"), "export function Button() {}").unwrap|write(ai_nested.join("Button.tsx.toon"), toon_content).unwrap|write(ai_src.join("main.ts.toon"), toon_content).unwrap|write(temp_dir.path().join(".ai/test.ts.toon"), toon_content).unwrap|create_dir(temp_dir.path().join("src")).unwrap|create_dir(temp_dir.path().join(".ai")).unwrap|read_to_string(&source_path).context|write(temp_dir.path().join("test.ts"), source).unwrap|write(temp_dir.path().join("src/main.ts"), "export const x = 1;").unwrap|write(
+            ai_lib.join("missing.ts.toon"),
+            "purpose: Missing\ntokens: ~50\nexports[0]:",
+        )
+        .unwrap|write; crate::parser,new; crate::cli,default; crate::types,new; tempfile,new().unwrap|new; crate::config,new|load|default

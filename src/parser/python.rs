@@ -1,4 +1,4 @@
-//! @toon
+//! @dose
 //! purpose: This module parses Python source files to extract top-level functions, classes,
 //!     and import statements. It uses tree-sitter for robust parsing and follows Python
 //!     conventions for determining which items are public exports.
@@ -19,7 +19,7 @@
 //!
 //! gotchas:
 //!     - Python has no explicit export syntax; all public top-level items are exports
-//!     - The @toon block can be in either triple-quoted docstrings or hash comments
+//!     - The @dose block can be in either triple-quoted docstrings or hash comments
 //!     - Relative imports use dots and need special handling in import_prefix nodes
 //!
 //! flows:
@@ -252,7 +252,7 @@ impl LanguageParser for PythonParser {
         let exports = self.extract_exports(root, source);
         let imports = self.extract_imports(root, source);
 
-        let tokens = source.len() / 4;
+        let tokens = super::tokens::count_tokens(source);
 
         Ok(ASTInfo {
             tokens,
@@ -266,8 +266,8 @@ impl LanguageParser for PythonParser {
     fn extract_toon_comments(&self, source: &str) -> Result<ExtractedComments, ParseError> {
         let mut result = ExtractedComments::default();
 
-        // Find @toon in docstrings (triple-quoted strings)
-        let docstring_pattern = Regex::new(r#""""[\s\S]*?@toon[\s\S]*?""""#).unwrap();
+        // Find @dose in docstrings (triple-quoted strings)
+        let docstring_pattern = Regex::new(r#""""[\s\S]*?@dose[\s\S]*?""""#).unwrap();
 
         if let Some(mat) = docstring_pattern.find(source) {
             let comment = mat.as_str();
@@ -275,12 +275,12 @@ impl LanguageParser for PythonParser {
                 .trim_start_matches("\"\"\"")
                 .trim_end_matches("\"\"\"");
 
-            // Remove @toon marker
+            // Remove @dose marker
             let content = content
                 .lines()
                 .map(|line| {
                     let trimmed = line.trim();
-                    if trimmed == "@toon" {
+                    if trimmed == "@dose" {
                         ""
                     } else {
                         trimmed
@@ -292,8 +292,8 @@ impl LanguageParser for PythonParser {
             result.file_block = Some(toon_comment::parse_toon_block(&content));
         }
 
-        // Also check for # @toon comments
-        let comment_pattern = Regex::new(r"#\s*@toon\s*\n((?:#[^\n]*\n)*)").unwrap();
+        // Also check for # @dose comments
+        let comment_pattern = Regex::new(r"#\s*@dose\s*\n((?:#[^\n]*\n)*)").unwrap();
         if result.file_block.is_none() {
             if let Some(caps) = comment_pattern.captures(source) {
                 if let Some(block) = caps.get(1) {
@@ -314,19 +314,53 @@ impl LanguageParser for PythonParser {
     fn strip_toon_comments(&self, source: &str, toon_path: &str) -> Result<String, ParseError> {
         let mut result = source.to_string();
 
-        // Replace docstring @toon comments
-        let docstring_pattern = Regex::new(r#""""[\s\S]*?@toon[\s\S]*?""""#).unwrap();
+        // Replace docstring @dose comments
+        let docstring_pattern = Regex::new(r#""""[\s\S]*?@dose[\s\S]*?""""#).unwrap();
         result = docstring_pattern
-            .replace_all(&result, &format!("# @toon -> {}", toon_path))
+            .replace_all(&result, &format!("# @dose -> {}", toon_path))
             .to_string();
 
-        // Remove # @toon comment blocks
-        let comment_pattern = Regex::new(r"#\s*@toon[^\n]*\n(?:#[^\n]*\n)*").unwrap();
+        // Remove # @dose comment blocks
+        let comment_pattern = Regex::new(r"#\s*@dose[^\n]*\n(?:#[^\n]*\n)*").unwrap();
         result = comment_pattern
-            .replace_all(&result, &format!("# @toon -> {}\n", toon_path))
+            .replace_all(&result, &format!("# @dose -> {}\n", toon_path))
             .to_string();
 
         Ok(result)
+    }
+
+    fn get_string_ranges(&self, source: &str) -> Result<Vec<(usize, usize)>, ParseError> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_python::LANGUAGE.into())
+            .map_err(|e| ParseError::ParseError(e.to_string()))?;
+
+        let tree = parser
+            .parse(source, None)
+            .ok_or_else(|| ParseError::ParseError("Failed to parse source".to_string()))?;
+
+        let mut ranges = Vec::new();
+        collect_string_ranges_py(&mut tree.walk(), &mut ranges);
+        Ok(ranges)
+    }
+}
+
+fn collect_string_ranges_py(
+    cursor: &mut tree_sitter::TreeCursor,
+    ranges: &mut Vec<(usize, usize)>,
+) {
+    loop {
+        let node = cursor.node();
+        if node.kind() == "string" {
+            ranges.push((node.start_byte(), node.end_byte()));
+        }
+        if cursor.goto_first_child() {
+            collect_string_ranges_py(cursor, ranges);
+            cursor.goto_parent();
+        }
+        if !cursor.goto_next_sibling() {
+            break;
+        }
     }
 }
 
@@ -394,6 +428,6 @@ mod tests {
         let stripped = parser
             .strip_toon_comments(PY_FIXTURE, "sample.py.toon")
             .unwrap();
-        assert!(stripped.starts_with("# @toon -> sample.py.toon"));
+        assert!(stripped.starts_with("# @dose -> sample.py.toon"));
     }
 }

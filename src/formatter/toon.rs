@@ -1,4 +1,4 @@
-//! @toon
+//! @dose
 //! purpose: This module handles serialization and deserialization of TOON DOSE files.
 //!     It formats ToonData into the compact TOON text format and parses TOON content back
 //!     into ToonData for validation and processing.

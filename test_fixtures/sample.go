@@ -1,4 +1,4 @@
-/* @toon
+/* @dose
 purpose: Sample Go fixture for testing the luny Go parser.
     This file contains various Go constructs including structs, interfaces,
     functions, and methods to verify extraction works correctly.

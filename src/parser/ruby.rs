@@ -1,4 +1,4 @@
-//! @toon
+//! @dose
 //! purpose: This module parses Ruby source files to extract classes, modules, methods,
 //!     and require/include statements. It uses tree-sitter for robust parsing and follows
 //!     Ruby conventions for determining which items are public exports.
@@ -19,7 +19,7 @@
 //!
 //! gotchas:
 //!     - Ruby has no explicit export mechanism; all defined items are potentially public
-//!     - The @toon block can be in =begin/=end blocks or hash comment blocks
+//!     - The @dose block can be in =begin/=end blocks or hash comment blocks
 //!     - Singleton methods have "self." prefix in the exported name
 //!
 //! flows:
@@ -211,7 +211,7 @@ impl LanguageParser for RubyParser {
         let exports = self.extract_exports(root, source);
         let imports = self.extract_imports(root, source);
 
-        let tokens = source.len() / 4;
+        let tokens = super::tokens::count_tokens(source);
 
         Ok(ASTInfo {
             tokens,
@@ -225,8 +225,8 @@ impl LanguageParser for RubyParser {
     fn extract_toon_comments(&self, source: &str) -> Result<ExtractedComments, ParseError> {
         let mut result = ExtractedComments::default();
 
-        // Find @toon in =begin/=end blocks
-        let block_pattern = Regex::new(r"=begin[\s\S]*?@toon[\s\S]*?=end").unwrap();
+        // Find @dose in =begin/=end blocks
+        let block_pattern = Regex::new(r"=begin[\s\S]*?@dose[\s\S]*?=end").unwrap();
 
         if let Some(mat) = block_pattern.find(source) {
             let comment = mat.as_str();
@@ -238,7 +238,7 @@ impl LanguageParser for RubyParser {
                 .lines()
                 .map(|line| {
                     let trimmed = line.trim();
-                    if trimmed == "@toon" {
+                    if trimmed == "@dose" {
                         ""
                     } else {
                         trimmed
@@ -250,9 +250,9 @@ impl LanguageParser for RubyParser {
             result.file_block = Some(toon_comment::parse_toon_block(&content));
         }
 
-        // Also check for # @toon comments
+        // Also check for # @dose comments
         if result.file_block.is_none() {
-            let comment_pattern = Regex::new(r"#\s*@toon\s*\n((?:#[^\n]*\n)*)").unwrap();
+            let comment_pattern = Regex::new(r"#\s*@dose\s*\n((?:#[^\n]*\n)*)").unwrap();
             if let Some(caps) = comment_pattern.captures(source) {
                 if let Some(block) = caps.get(1) {
                     let content = block
@@ -272,19 +272,54 @@ impl LanguageParser for RubyParser {
     fn strip_toon_comments(&self, source: &str, toon_path: &str) -> Result<String, ParseError> {
         let mut result = source.to_string();
 
-        // Replace =begin/=end @toon blocks
-        let block_pattern = Regex::new(r"=begin[\s\S]*?@toon[\s\S]*?=end").unwrap();
+        // Replace =begin/=end @dose blocks
+        let block_pattern = Regex::new(r"=begin[\s\S]*?@dose[\s\S]*?=end").unwrap();
         result = block_pattern
-            .replace_all(&result, &format!("# @toon -> {}", toon_path))
+            .replace_all(&result, &format!("# @dose -> {}", toon_path))
             .to_string();
 
-        // Remove # @toon comment blocks
-        let comment_pattern = Regex::new(r"#\s*@toon[^\n]*\n(?:#[^\n]*\n)*").unwrap();
+        // Remove # @dose comment blocks
+        let comment_pattern = Regex::new(r"#\s*@dose[^\n]*\n(?:#[^\n]*\n)*").unwrap();
         result = comment_pattern
-            .replace_all(&result, &format!("# @toon -> {}\n", toon_path))
+            .replace_all(&result, &format!("# @dose -> {}\n", toon_path))
             .to_string();
 
         Ok(result)
+    }
+
+    fn get_string_ranges(&self, source: &str) -> Result<Vec<(usize, usize)>, ParseError> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_ruby::LANGUAGE.into())
+            .map_err(|e| ParseError::ParseError(e.to_string()))?;
+
+        let tree = parser
+            .parse(source, None)
+            .ok_or_else(|| ParseError::ParseError("Failed to parse source".to_string()))?;
+
+        let mut ranges = Vec::new();
+        collect_string_ranges_rb(&mut tree.walk(), &mut ranges);
+        Ok(ranges)
+    }
+}
+
+fn collect_string_ranges_rb(
+    cursor: &mut tree_sitter::TreeCursor,
+    ranges: &mut Vec<(usize, usize)>,
+) {
+    loop {
+        let node = cursor.node();
+        let kind = node.kind();
+        if kind == "string" || kind == "string_content" {
+            ranges.push((node.start_byte(), node.end_byte()));
+        }
+        if cursor.goto_first_child() {
+            collect_string_ranges_rb(cursor, ranges);
+            cursor.goto_parent();
+        }
+        if !cursor.goto_next_sibling() {
+            break;
+        }
     }
 }
 
@@ -336,6 +371,6 @@ mod tests {
         let stripped = parser
             .strip_toon_comments(RB_FIXTURE, "sample.rb.toon")
             .unwrap();
-        assert!(stripped.starts_with("# @toon -> sample.rb.toon"));
+        assert!(stripped.starts_with("# @dose -> sample.rb.toon"));
     }
 }

@@ -1,4 +1,4 @@
-/*! @toon
+/*! @dose
 purpose: Sample Rust fixture for testing the luny Rust parser.
     This file contains various Rust constructs including structs, enums,
     traits, and impl blocks to verify extraction works correctly.

@@ -1,4 +1,4 @@
-/** @toon
+/** @dose
 purpose: Sample TypeScript fixture for testing the luny parser.
     This file contains various TypeScript constructs to verify extraction works correctly.
 

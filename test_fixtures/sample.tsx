@@ -1,4 +1,4 @@
-/** @toon
+/** @dose
 purpose: Sample TSX fixture for testing React component and hook extraction.
     This demonstrates JSX syntax handling and React-specific patterns.
 

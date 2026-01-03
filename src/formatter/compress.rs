@@ -1,4 +1,4 @@
-//! @toon
+//! @dose
 //! purpose: This module provides text compression utilities that reduce verbose prose to
 //!     compact, token-efficient text for TOON files. It applies pattern-based substitutions
 //!     to remove filler words and redundant phrases.

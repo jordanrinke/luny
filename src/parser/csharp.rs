@@ -1,4 +1,4 @@
-//! @toon
+//! @dose
 //! purpose: This module parses C# source files to extract public classes, interfaces,
 //!     structs, enums, records, and methods. It uses tree-sitter for robust parsing
 //!     and respects C# visibility modifiers.
@@ -20,7 +20,7 @@
 //! gotchas:
 //!     - C# uses explicit visibility modifiers; default is not public
 //!     - Records with primary constructors have special AST structure
-//!     - The @toon block can be in block comments or triple-slash XML comments
+//!     - The @dose block can be in block comments or triple-slash XML comments
 //!
 //! flows:
 //!     - Parse: Create tree-sitter parser, set C# language, parse source
@@ -238,7 +238,7 @@ impl LanguageParser for CSharpParser {
         let exports = self.extract_exports(root, source);
         let imports = self.extract_imports(root, source);
 
-        let tokens = source.len() / 4;
+        let tokens = super::tokens::count_tokens(source);
 
         Ok(ASTInfo {
             tokens,
@@ -252,8 +252,8 @@ impl LanguageParser for CSharpParser {
     fn extract_toon_comments(&self, source: &str) -> Result<ExtractedComments, ParseError> {
         let mut result = ExtractedComments::default();
 
-        // Find @toon in /** */ block comments
-        let block_pattern = Regex::new(r"/\*\*[\s\S]*?@toon[\s\S]*?\*/").unwrap();
+        // Find @dose in /** */ block comments
+        let block_pattern = Regex::new(r"/\*\*[\s\S]*?@dose[\s\S]*?\*/").unwrap();
 
         if let Some(mat) = block_pattern.find(source) {
             let comment = mat.as_str();
@@ -263,7 +263,7 @@ impl LanguageParser for CSharpParser {
                 .lines()
                 .map(|line| {
                     let trimmed = line.trim().trim_start_matches('*').trim();
-                    if trimmed == "@toon" {
+                    if trimmed == "@dose" {
                         ""
                     } else {
                         trimmed
@@ -275,9 +275,9 @@ impl LanguageParser for CSharpParser {
             result.file_block = Some(toon_comment::parse_toon_block(&content));
         }
 
-        // Also check for /// @toon XML doc comments
+        // Also check for /// @dose XML doc comments
         if result.file_block.is_none() {
-            let doc_pattern = Regex::new(r"///\s*@toon\s*\n((?:///[^\n]*\n)*)").unwrap();
+            let doc_pattern = Regex::new(r"///\s*@dose\s*\n((?:///[^\n]*\n)*)").unwrap();
             if let Some(caps) = doc_pattern.captures(source) {
                 if let Some(block) = caps.get(1) {
                     let content = block
@@ -297,19 +297,59 @@ impl LanguageParser for CSharpParser {
     fn strip_toon_comments(&self, source: &str, toon_path: &str) -> Result<String, ParseError> {
         let mut result = source.to_string();
 
-        // Replace /** */ @toon blocks
-        let block_pattern = Regex::new(r"/\*\*[\s\S]*?@toon[\s\S]*?\*/").unwrap();
+        // Replace /** */ @dose blocks
+        let block_pattern = Regex::new(r"/\*\*[\s\S]*?@dose[\s\S]*?\*/").unwrap();
         result = block_pattern
-            .replace_all(&result, &format!("// @toon -> {}", toon_path))
+            .replace_all(&result, &format!("// @dose -> {}", toon_path))
             .to_string();
 
-        // Remove /// @toon comment blocks
-        let doc_pattern = Regex::new(r"///\s*@toon[^\n]*\n(?:///[^\n]*\n)*").unwrap();
+        // Remove /// @dose comment blocks
+        let doc_pattern = Regex::new(r"///\s*@dose[^\n]*\n(?:///[^\n]*\n)*").unwrap();
         result = doc_pattern
-            .replace_all(&result, &format!("// @toon -> {}\n", toon_path))
+            .replace_all(&result, &format!("// @dose -> {}\n", toon_path))
             .to_string();
 
         Ok(result)
+    }
+
+    fn get_string_ranges(&self, source: &str) -> Result<Vec<(usize, usize)>, ParseError> {
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_c_sharp::LANGUAGE.into())
+            .map_err(|e| ParseError::ParseError(e.to_string()))?;
+
+        let tree = parser
+            .parse(source, None)
+            .ok_or_else(|| ParseError::ParseError("Failed to parse source".to_string()))?;
+
+        let mut ranges = Vec::new();
+        collect_string_ranges_cs(&mut tree.walk(), &mut ranges);
+        Ok(ranges)
+    }
+}
+
+fn collect_string_ranges_cs(
+    cursor: &mut tree_sitter::TreeCursor,
+    ranges: &mut Vec<(usize, usize)>,
+) {
+    loop {
+        let node = cursor.node();
+        let kind = node.kind();
+        // C# has string_literal, verbatim_string_literal, interpolated_string_expression, character_literal
+        if kind == "string_literal"
+            || kind == "verbatim_string_literal"
+            || kind == "interpolated_string_expression"
+            || kind == "character_literal"
+        {
+            ranges.push((node.start_byte(), node.end_byte()));
+        }
+        if cursor.goto_first_child() {
+            collect_string_ranges_cs(cursor, ranges);
+            cursor.goto_parent();
+        }
+        if !cursor.goto_next_sibling() {
+            break;
+        }
     }
 }
 
@@ -379,6 +419,6 @@ mod tests {
         let stripped = parser
             .strip_toon_comments(CS_FIXTURE, "sample.cs.toon")
             .unwrap();
-        assert!(stripped.starts_with("// @toon -> sample.cs.toon"));
+        assert!(stripped.starts_with("// @dose -> sample.cs.toon"));
     }
 }

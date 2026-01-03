@@ -1,5 +1,5 @@
-purpose: This module serves as the central hub for all language parsers in luny.
-tokens: ~2697
+purpose: This module serves as the central hub for all language parsers in luny. It defines the LanguageParser trait that all parsers must implement and provides the ParserFactory for creating and retrieving language-specific parsers based on file extensions.
+tokens: ~1795
 exports[14]: toon_comment(mod), ParseError(enum), LanguageParser(trait), ParserFactory(struct), new(method(ParserFactory)), get_parser(method(ParserFactory)), get_parser_by_ext(method(ParserFactory)), is_supported(method(ParserFactory)), supported_extensions(method(ParserFactory)), new(fn), get_parser(fn), get_parser_by_ext(fn), is_supported(fn), supported_extensions(fn)
 signatures[8]:
   ParseError(enum): { IoError | ParseError | UnsupportedLanguage }
@@ -10,5 +10,5 @@ signatures[8]:
   get_parser_by_ext(fn): (&self, ext: &str) Option<&dyn LanguageParser>
   is_supported(fn): (&self, file_path: &Path) bool
   supported_extensions(fn): (&self) Vec<&str>
-imports[12]{from,items}: crate::types,ASTInfo|ExtractedComments; std::collections,HashMap; std::path,Path; std::sync,Arc; thiserror,Error; typescript,TypeScriptParser; python,PythonParser; ruby,RubyParser; csharp,CSharpParser; go,GoParser; rust,RustParser; super::*,super::*
-calls[9]{target,methods}: ruby,new; std::sync,new|clone; python,new; go,new; typescript,new; csharp,new; rust,new; std::collections,new; std::path,new
+imports[12]{from,items}: crate::types,ASTInfo|ExtractedComments; std::collections,HashMap; std::path,Path; std::sync,Arc; thiserror,Error; csharp,CSharpParser; go,GoParser; python,PythonParser; ruby,RubyParser; rust,RustParser; typescript,TypeScriptParser; super::*,super::*
+calls[8]{target,methods}: csharp,new; go,new; ruby,new; rust,new; typescript,new; std::sync,new|clone; python,new; std::collections,new

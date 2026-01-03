@@ -1,4 +1,4 @@
-//! @toon
+//! @dose
 //! purpose: This is the library crate root for luny, exposing the public API for use as both
 //!     a CLI tool and a library. It re-exports key types and functions from all modules
 //!     for convenient access by consumers.
@@ -22,12 +22,16 @@
 
 pub mod cli;
 pub mod commands;
+pub mod config;
+pub mod exclusion;
 pub mod formatter;
 pub mod parser;
 pub mod types;
 
 // Re-export main types for convenience
 pub use cli::{Cli, Commands, GenerateArgs, StripArgs, ValidateArgs};
+pub use config::Config;
+pub use exclusion::ExclusionConfig;
 pub use formatter::{format_toon, parse_toon};
 pub use parser::{LanguageParser, ParseError, ParserFactory};
 pub use types::{

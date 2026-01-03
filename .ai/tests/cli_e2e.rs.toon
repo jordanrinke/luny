@@ -1,5 +1,5 @@
 purpose: Auth module
-tokens: ~1093
+tokens: ~1205
 invariants: Tokens expire in 15min
 imports[2]{from,items}: std::process,Command; tempfile,TempDir
 calls[2]{target,methods}: std::process,new; tempfile,new().expect|new

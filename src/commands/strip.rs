@@ -1,5 +1,5 @@
-//! @toon
-//! purpose: This module implements the strip command that removes @toon comment blocks
+//! @dose
+//! purpose: This module implements the strip command that removes @dose comment blocks
 //!     from source files and replaces them with minimal stub references. This reduces
 //!     code noise while maintaining links to the full documentation.
 //!
@@ -10,7 +10,7 @@
 //!
 //! invariants:
 //!     - The stripped output always contains a reference to the TOON file location
-//!     - Original file content (minus @toon blocks) is preserved exactly
+//!     - Original file content (minus @dose blocks) is preserved exactly
 //!
 //! do-not:
 //!     - Never strip without providing a TOON path reference in the output
@@ -23,7 +23,7 @@
 //! flows:
 //!     - Read: Get source from file or stdin
 //!     - Parse: Detect language and get appropriate parser
-//!     - Strip: Remove @toon blocks, insert stub comments
+//!     - Strip: Remove @dose blocks, insert stub comments
 //!     - Write: Output to file or stdout
 
 use crate::cli::StripArgs;
@@ -93,7 +93,14 @@ pub fn run_strip(args: &StripArgs, root: &Path, _verbose: bool) -> Result<()> {
     };
 
     // Strip comments
-    let stripped = parser.strip_toon_comments(&source, &toon_path)?;
+    let mut stripped = parser.strip_toon_comments(&source, &toon_path)?;
+
+    // Apply minification if requested
+    if args.minify_extreme {
+        stripped = minify_extreme(&stripped, &ext, &factory)?;
+    } else if args.minify {
+        stripped = minify_source(&stripped, &ext);
+    }
 
     // Write output
     if let Some(ref output) = args.output {
@@ -113,6 +120,107 @@ pub fn run_strip(args: &StripArgs, root: &Path, _verbose: bool) -> Result<()> {
     Ok(())
 }
 
+/// Check if a language extension is whitespace-sensitive (indentation matters)
+fn is_whitespace_sensitive(ext: &str) -> bool {
+    matches!(ext, "py" | "python" | "rb" | "ruby" | "yaml" | "yml")
+}
+
+/// Minify source code to reduce token count
+/// - For whitespace-sensitive languages: only remove blank lines
+/// - For other languages: remove blank lines, strip indentation, collapse multiple spaces
+fn minify_source(source: &str, ext: &str) -> String {
+    let whitespace_sensitive = is_whitespace_sensitive(ext);
+
+    source
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            if whitespace_sensitive {
+                line.to_string()
+            } else {
+                // Remove leading/trailing whitespace and collapse multiple spaces to single
+                collapse_whitespace(line.trim())
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Collapse multiple consecutive whitespace characters to a single space
+fn collapse_whitespace(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut prev_was_space = false;
+
+    for c in s.chars() {
+        if c.is_whitespace() {
+            if !prev_was_space {
+                result.push(' ');
+                prev_was_space = true;
+            }
+        } else {
+            result.push(c);
+            prev_was_space = false;
+        }
+    }
+
+    result
+}
+
+/// Experimental: Aggressive minification using AST to preserve string literals
+/// Removes all non-essential whitespace while keeping string contents intact
+fn minify_extreme(source: &str, ext: &str, factory: &ParserFactory) -> Result<String> {
+    // For whitespace-sensitive languages, fall back to safe minification
+    if is_whitespace_sensitive(ext) {
+        return Ok(minify_source(source, ext));
+    }
+
+    let parser = factory
+        .get_parser_by_ext(ext)
+        .context("No parser for extreme minification")?;
+
+    // Get string literal byte ranges from AST
+    let string_ranges = parser.get_string_ranges(source)?;
+
+    let bytes = source.as_bytes();
+    let mut result = String::with_capacity(source.len());
+    let mut prev_was_space = false;
+    let mut prev_was_alnum = false;
+
+    for (i, &byte) in bytes.iter().enumerate() {
+        let c = byte as char;
+
+        // Check if we're inside a string literal
+        let in_string = string_ranges
+            .iter()
+            .any(|(start, end)| i >= *start && i < *end);
+
+        if in_string {
+            // Preserve everything inside strings
+            result.push(c);
+            prev_was_space = false;
+            prev_was_alnum = false;
+        } else if c == '\n' || c == '\r' {
+            // Remove newlines (we're collapsing to single line)
+            if !prev_was_space && prev_was_alnum {
+                result.push(' ');
+                prev_was_space = true;
+            }
+        } else if c.is_whitespace() {
+            // Collapse whitespace, but keep one space between alphanumeric tokens
+            if !prev_was_space && prev_was_alnum {
+                result.push(' ');
+                prev_was_space = true;
+            }
+        } else {
+            result.push(c);
+            prev_was_space = false;
+            prev_was_alnum = c.is_alphanumeric() || c == '_';
+        }
+    }
+
+    Ok(result.trim().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,8 +234,8 @@ mod tests {
     fn test_strip_file_removes_toon_comments() {
         let temp_dir = TempDir::new().unwrap();
 
-        // Create a TypeScript file with @toon comment
-        let source = r#"/** @toon
+        // Create a TypeScript file with @dose comment
+        let source = r#"/** @dose
 purpose: Test module
 when-editing:
     - Check imports
@@ -150,12 +258,14 @@ function helper() {
             input: Some(input_path.clone()),
             output: Some(output_path.clone()),
             ext: None,
+            minify: false,
+            minify_extreme: false,
         };
 
         let result = run_strip(&args, temp_dir.path(), false);
         assert!(result.is_ok());
 
-        // Read output and verify @toon block content was removed
+        // Read output and verify @dose block content was removed
         let output = fs::read_to_string(&output_path).unwrap();
         // The block content (purpose:, when-editing:) should be gone
         assert!(!output.contains("when-editing:"));
@@ -168,8 +278,8 @@ function helper() {
     fn test_strip_adds_stub_comment() {
         let temp_dir = TempDir::new().unwrap();
 
-        // Create a TypeScript file with @toon comment
-        let source = r#"/** @toon
+        // Create a TypeScript file with @dose comment
+        let source = r#"/** @dose
 purpose: Test module
 */
 
@@ -184,6 +294,8 @@ export const x = 1;
             input: Some(input_path.clone()),
             output: Some(output_path.clone()),
             ext: None,
+            minify: false,
+            minify_extreme: false,
         };
 
         let result = run_strip(&args, temp_dir.path(), false);
@@ -198,8 +310,8 @@ export const x = 1;
     fn test_strip_preserves_non_toon_content() {
         let temp_dir = TempDir::new().unwrap();
 
-        // Create a TypeScript file with @toon and regular comments
-        let source = r#"/** @toon
+        // Create a TypeScript file with @dose and regular comments
+        let source = r#"/** @dose
 purpose: Test module
 */
 
@@ -222,6 +334,8 @@ function foo() {
             input: Some(input_path.clone()),
             output: Some(output_path.clone()),
             ext: None,
+            minify: false,
+            minify_extreme: false,
         };
 
         let result = run_strip(&args, temp_dir.path(), false);
@@ -237,8 +351,8 @@ function foo() {
     fn test_strip_python_file() {
         let temp_dir = TempDir::new().unwrap();
 
-        // Create a Python file with @toon comment
-        let source = r#""""@toon
+        // Create a Python file with @dose comment
+        let source = r#""""@dose
 purpose: Python test module
 invariants:
     - Must define foo function
@@ -257,6 +371,8 @@ def foo():
             input: Some(input_path.clone()),
             output: Some(output_path.clone()),
             ext: None,
+            minify: false,
+            minify_extreme: false,
         };
 
         let result = run_strip(&args, temp_dir.path(), false);
@@ -275,7 +391,7 @@ def foo():
         let temp_dir = TempDir::new().unwrap();
 
         // Create a file without extension
-        let source = r#"/** @toon
+        let source = r#"/** @dose
 purpose: Test module
 */
 
@@ -290,6 +406,8 @@ export const x = 1;
             input: Some(input_path.clone()),
             output: Some(output_path.clone()),
             ext: Some("ts".to_string()), // Specify extension
+            minify: false,
+            minify_extreme: false,
         };
 
         // Without ext flag it would fail to find parser
@@ -302,8 +420,8 @@ export const x = 1;
     fn test_strip_rust_file() {
         let temp_dir = TempDir::new().unwrap();
 
-        // Create a Rust file with @toon block comment
-        let source = r#"/*! @toon
+        // Create a Rust file with @dose block comment
+        let source = r#"/*! @dose
 purpose: Rust test module
 invariants:
     - Must define main function
@@ -322,27 +440,29 @@ fn main() {
             input: Some(input_path.clone()),
             output: Some(output_path.clone()),
             ext: None,
+            minify: false,
+            minify_extreme: false,
         };
 
         let result = run_strip(&args, temp_dir.path(), false);
         assert!(result.is_ok());
 
-        // Read output and verify @toon block was replaced with stub
+        // Read output and verify @dose block was replaced with stub
         let output = fs::read_to_string(&output_path).unwrap();
-        // Original @toon block content should be gone
+        // Original @dose block content should be gone
         assert!(!output.contains("Must define main function"));
         // The code should remain
         assert!(output.contains("fn main()"));
         // Should have the stub reference
-        assert!(output.contains("// @toon ->"));
+        assert!(output.contains("// @dose ->"));
     }
 
     #[test]
     fn test_strip_go_file() {
         let temp_dir = TempDir::new().unwrap();
 
-        // Create a Go file with @toon comment
-        let source = r#"/* @toon
+        // Create a Go file with @dose comment
+        let source = r#"/* @dose
 purpose: Go test module
 invariants:
     - Must define main function
@@ -363,6 +483,8 @@ func main() {
             input: Some(input_path.clone()),
             output: Some(output_path.clone()),
             ext: None,
+            minify: false,
+            minify_extreme: false,
         };
 
         let result = run_strip(&args, temp_dir.path(), false);
@@ -379,7 +501,7 @@ func main() {
     fn test_strip_file_without_toon_comments() {
         let temp_dir = TempDir::new().unwrap();
 
-        // Create a file without @toon comments
+        // Create a file without @dose comments
         let source = r#"// Regular file
 export const x = 1;
 
@@ -396,6 +518,8 @@ function foo() {
             input: Some(input_path.clone()),
             output: Some(output_path.clone()),
             ext: None,
+            minify: false,
+            minify_extreme: false,
         };
 
         let result = run_strip(&args, temp_dir.path(), false);
@@ -420,6 +544,8 @@ function foo() {
             input: Some(input_path.clone()),
             output: None, // No output file means stdout
             ext: None,
+            minify: false,
+            minify_extreme: false,
         };
 
         // Should succeed (output goes to stdout)
@@ -435,7 +561,7 @@ function foo() {
         let subdir = temp_dir.path().join("src");
         fs::create_dir(&subdir).unwrap();
 
-        let source = r#"/** @toon
+        let source = r#"/** @dose
 purpose: Subdir test
 */
 export const x = 1;
@@ -449,6 +575,8 @@ export const x = 1;
             input: Some(PathBuf::from("src/test.ts")),
             output: Some(output_path.clone()),
             ext: None,
+            minify: false,
+            minify_extreme: false,
         };
 
         let result = run_strip(&args, temp_dir.path(), false);
@@ -462,7 +590,7 @@ export const x = 1;
     fn test_strip_absolute_path() {
         let temp_dir = TempDir::new().unwrap();
 
-        let source = r#"/** @toon
+        let source = r#"/** @dose
 purpose: Absolute path test
 */
 export const x = 1;
@@ -477,6 +605,8 @@ export const x = 1;
             input: Some(input_path.clone()),
             output: Some(output_path.clone()),
             ext: None,
+            minify: false,
+            minify_extreme: false,
         };
 
         let result = run_strip(&args, temp_dir.path(), false);
@@ -494,7 +624,7 @@ export const x = 1;
         let subdir = temp_dir.path().join("src/components");
         fs::create_dir_all(&subdir).unwrap();
 
-        let source = r#"/** @toon
+        let source = r#"/** @dose
 purpose: Button component
 */
 export function Button() {}
@@ -508,6 +638,8 @@ export function Button() {}
             input: Some(input_path.clone()),
             output: Some(output_path.clone()),
             ext: None,
+            minify: false,
+            minify_extreme: false,
         };
 
         let result = run_strip(&args, temp_dir.path(), false);
@@ -532,6 +664,8 @@ export function Button() {}
             input: Some(input_path.clone()),
             output: None,
             ext: None,
+            minify: false,
+            minify_extreme: false,
         };
 
         // Should fail because no parser for .unsupported
@@ -543,8 +677,8 @@ export function Button() {}
     fn test_strip_csharp_file() {
         let temp_dir = TempDir::new().unwrap();
 
-        // Create a C# file with @toon comment
-        let source = r#"/** @toon
+        // Create a C# file with @dose comment
+        let source = r#"/** @dose
 purpose: C# test module
 invariants:
     - Must define MyClass
@@ -567,6 +701,8 @@ namespace Test
             input: Some(input_path.clone()),
             output: Some(output_path.clone()),
             ext: None,
+            minify: false,
+            minify_extreme: false,
         };
 
         let result = run_strip(&args, temp_dir.path(), false);
@@ -581,8 +717,8 @@ namespace Test
     fn test_strip_ruby_file() {
         let temp_dir = TempDir::new().unwrap();
 
-        // Create a Ruby file with @toon comment
-        let source = r#"# @toon
+        // Create a Ruby file with @dose comment
+        let source = r#"# @dose
 # purpose: Ruby test module
 # invariants:
 #     - Must define MyClass
@@ -602,6 +738,8 @@ end
             input: Some(input_path.clone()),
             output: Some(output_path.clone()),
             ext: None,
+            minify: false,
+            minify_extreme: false,
         };
 
         let result = run_strip(&args, temp_dir.path(), false);
