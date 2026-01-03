@@ -15,22 +15,20 @@ A multi-language CLI tool that generates AI-optimized `.toon` DOSE (Distilled, O
 
 Luny's approach is grounded in peer-reviewed research on LLM context handling:
 
-- **[Lost in the Middle](https://arxiv.org/abs/2307.03172)** (Liu et al., 2023): Models perform best when relevant info is at the **beginning or end** of context (U-shaped curve). TOON uses "U-curve ordering" to place critical info first.
+- **[Lost in the Middle](https://arxiv.org/abs/2307.03172)** (Liu et al., 2023): Models perform best when relevant info is at the **beginning or end** of context (U-shaped curve). Luny uses "U-curve ordering" to place critical info first.
 
-- **[Focused Chain-of-Thought](https://arxiv.org/abs/2511.22176)** (Struppek et al., 2025): Structured input formatting reduces generated tokens **2-3x** while maintaining accuracy. TOON's structured format aligns with F-CoT principles.
+- **[Focused Chain-of-Thought](https://arxiv.org/abs/2511.22176)** (Struppek et al., 2025): Structured input formatting reduces generated tokens **2-3x** while maintaining accuracy. DOSE's structured format aligns with F-CoT principles.
 
-- **[UID Hypothesis](https://arxiv.org/abs/2510.06953)** (Gwak et al., 2025): Uniform information density correlates with **10-32% accuracy gains** in reasoning. TOON's consistent structure promotes uniform density.
+- **[UID Hypothesis](https://arxiv.org/abs/2510.06953)** (Gwak et al., 2025): Uniform information density correlates with **10-32% accuracy gains** in reasoning. DOSE's consistent structure promotes uniform density.
 
-- **[RULER](https://arxiv.org/abs/2404.06654)** (Hsieh et al., 2024): Models claiming 32K+ context often fail at actual 32K usage. TOON keeps context small and focused.
+- **[RULER](https://arxiv.org/abs/2404.06654)** (Hsieh et al., 2024): Models claiming 32K+ context often fail at actual 32K usage. DOSE keeps context small and focused.
+
+- **[Meta Knowledge for RAG](https://arxiv.org/abs/2408.09017)** (Sukumaran et al., 2024): Preparing structured metadata before retrieval **significantly outperforms traditional document chunking** (p < 0.01). DOSE files are meta knowledge summaries for code.
+
+- **[ClassEval](https://arxiv.org/abs/2308.01861)** (Du et al., 2023): LLMs struggle with class-level code due to "limited ability of understanding long instructions." Stripping context to **minimal semantic information** improves reasoning on complex code structures.
 
 
 ## Installation
-
-### From crates.io
-
-```bash
-cargo install luny
-```
 
 ### From source
 
@@ -301,30 +299,6 @@ luny strip - --ext ts          # Read from stdin
 | Standard | 250 | 500 | Typical component/module |
 | Complex | 400 | 800 | Many exports, flows + error handling |
 
-## Library Usage
-
-```rust
-use luny::{ParserFactory, format_toon, ToonData};
-use std::path::Path;
-
-fn main() -> anyhow::Result<()> {
-    let factory = ParserFactory::new();
-    let parser = factory.get_parser("ts").unwrap();
-
-    let source = std::fs::read_to_string("src/main.ts")?;
-    let ast_info = parser.extract_ast_info(&source, Path::new("main.ts"))?;
-
-    let toon_data = ToonData::new(
-        "Main entry point".to_string(),
-        ast_info.tokens,
-        ast_info.exports,
-    );
-
-    println!("{}", format_toon(&toon_data));
-    Ok(())
-}
-```
-
 ## Development
 
 ```bash
@@ -351,6 +325,8 @@ Luny's MSRV is **Rust 1.80** (enforced via `rust-version = "1.80"` in `Cargo.tom
 - Hsieh et al. (2024). "[RULER: What's the Real Context Size of Your Long-Context Language Models?](https://arxiv.org/abs/2404.06654)" - COLM
 - Struppek et al. (2025). "[Focused Chain-of-Thought](https://arxiv.org/abs/2511.22176)" - arXiv
 - Gwak et al. (2025). "[Revisiting the Uniform Information Density Hypothesis](https://arxiv.org/abs/2510.06953)" - arXiv
+- Sukumaran et al. (2024). "[Meta Knowledge for Retrieval Augmented Large Language Models](https://arxiv.org/abs/2408.09017)" - arXiv
+- Du et al. (2023). "[ClassEval: A Manually-Crafted Benchmark for Evaluating LLMs on Class-level Code Generation](https://arxiv.org/abs/2308.01861)" - arXiv
 
 ## License
 
