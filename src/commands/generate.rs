@@ -215,11 +215,11 @@ fn build_dependency_graph(
             // Avoid leaking absolute paths into the dependency graph.
             continue;
         };
-        let file_relative = file_relative.to_string_lossy().to_string();
+        let file_relative = normalize_separators(&file_relative.to_string_lossy());
 
         // Process imports to build imported_by
         for import in &ast_info.imports {
-            let target = resolve_import_path(&import.from, path, root);
+            let target = normalize_separators(&resolve_import_path(&import.from, path, root));
             graph
                 .imported_by
                 .entry(target)
@@ -229,7 +229,7 @@ fn build_dependency_graph(
 
         // Process calls to build called_by
         for call in &ast_info.calls {
-            let target = resolve_import_path(&call.target, path, root);
+            let target = normalize_separators(&resolve_import_path(&call.target, path, root));
             graph
                 .called_by
                 .entry(target)
@@ -298,7 +298,7 @@ fn process_file(
     let relative = path
         .strip_prefix(root)
         .with_context(|| format!("File {} is outside root {}", path.display(), root.display()))?;
-    let relative_str = relative.to_string_lossy().to_string();
+    let relative_str = normalize_separators(&relative.to_string_lossy());
     let toon_filename = format!(
         "{}.toon",
         relative.file_name().unwrap_or_default().to_string_lossy()
@@ -438,22 +438,28 @@ fn process_file(
     Ok(true)
 }
 
+/// Normalize path separators to forward slashes for cross-platform consistency
+fn normalize_separators(path: &str) -> String {
+    path.replace('\\', "/")
+}
+
 /// Get various path forms to match against imports
 fn get_path_variants(path: &str) -> Vec<String> {
-    let mut variants = vec![path.to_string()];
+    let normalized = normalize_separators(path);
+    let mut variants = vec![normalized.clone()];
 
     // Without extension
-    if let Some(without_ext) = path
+    if let Some(without_ext) = normalized
         .strip_suffix(".ts")
-        .or_else(|| path.strip_suffix(".tsx"))
-        .or_else(|| path.strip_suffix(".js"))
-        .or_else(|| path.strip_suffix(".jsx"))
+        .or_else(|| normalized.strip_suffix(".tsx"))
+        .or_else(|| normalized.strip_suffix(".js"))
+        .or_else(|| normalized.strip_suffix(".jsx"))
     {
         variants.push(without_ext.to_string());
     }
 
     // With ./ prefix
-    variants.push(format!("./{}", path));
+    variants.push(format!("./{}", normalized));
 
     variants
 }
