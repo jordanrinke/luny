@@ -44,6 +44,9 @@ make install
 # Generate .toon files for your project
 luny generate src/
 
+# Watch for changes and regenerate automatically
+luny watch src/
+
 # Validate .toon files against source
 luny validate
 
@@ -278,6 +281,22 @@ luny strip - --ext ts          # Read from stdin
 ```
 
 **LLM Integration**: Configure your AI tool to pipe files through `luny strip` when reading source files that have corresponding `.toon` DOSE files. This avoids duplicate context and reduces token usage.
+
+### `luny watch`
+
+Watch for file changes and incrementally regenerate affected `.toon` files. Uses smart dependency tracking to only regenerate files that are actually affected by a change.
+
+```bash
+luny watch                     # Watch current directory
+luny watch src/                # Watch specific path
+luny watch --debounce 200      # Custom debounce delay (ms, default: 100)
+luny watch --clear             # Clear screen before each update
+```
+
+When a file changes, watch mode regenerates:
+- The changed file's `.toon`
+- Files that import the changed file (their `imported-by` data changed)
+- Files the changed file imports (their `imported-by` list changed)
 
 ## Supported Languages
 

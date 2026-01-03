@@ -1,0 +1,21 @@
+purpose: Shared dependency graph module for tracking import/call relationships between source files. Used by both generate and watch commands.
+tokens: ~2826
+exports[24]: DependencyGraph(struct), AffectedFiles(struct), new(method(AffectedFiles)), all(method(AffectedFiles)), new(fn), all(fn), new(method(DependencyGraph)), get_imported_by(method(DependencyGraph)), get_called_by(method(DependencyGraph)), add_file(method(DependencyGraph)), remove_file(method(DependencyGraph)), update_file(method(DependencyGraph)), get_affected_files(method(DependencyGraph)), new(fn), get_imported_by(fn), get_called_by(fn), add_file(fn), remove_file(fn), update_file(fn), get_affected_files(fn), resolve_import_path(fn), normalize_path(fn), normalize_separators(fn), get_path_variants(fn)
+signatures[15]:
+  DependencyGraph(struct): { imported_by: HashMap<String, Vec<String>>, called_by: HashMap<String, Vec<CalledByInfo>>, imports: HashMap<String, Vec<String>>, calls_to: HashMa...
+  AffectedFiles(struct): { direct: HashSet<String>, indirect: HashSet<String> }
+  new(fn): () Self
+  all(fn): (&self) HashSet<String>
+  new(fn): () Self
+  get_imported_by(fn): (&self, file_path: &str) Vec<String>
+  get_called_by(fn): (&self, file_path: &str) Vec<CalledByInfo>
+  add_file(fn): (&mut self, file_path: &str, file_imports: Vec<String>, file_calls: Vec<(String, String)>)
+  remove_file(fn): (&mut self, file_path: &str) AffectedFiles
+  update_file(fn): (&mut self, file_path: &str, file_imports: Vec<String>, file_calls: Vec<(String, String)>) AffectedFiles
+  get_affected_files(fn): (&self, file_path: &str) AffectedFiles
+  resolve_import_path(fn): (import_from: &str, from_file: &Path, root: &Path) String
+  normalize_path(fn): (path: &Path) PathBuf
+  normalize_separators(fn): (path: &str) String
+  get_path_variants(fn): (path: &str) Vec<String>
+imports[4]{from,items}: crate::types,CalledByInfo; std::collections,HashMap|HashSet; std::path,Path|PathBuf; super::*,super::*
+calls[1]{target,methods}: std::path,from|new

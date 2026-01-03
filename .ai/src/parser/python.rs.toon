@@ -1,8 +1,8 @@
 purpose: This module parses Python source files to extract top-level functions, classes, and import statements. It uses tree-sitter for robust parsing and follows Python conventions for determining which items are public exports.
-tokens: ~3006
+tokens: ~3010
 exports[3]: PythonParser(struct), new(method(PythonParser)), new(fn)
 signatures[2]:
   PythonParser(struct): { }
   new(fn): () Self
 imports[6]{from,items}: crate::parser,toon_comment|LanguageParser|ParseError; crate::types,ASTInfo|ExportInfo|ExtractedComments|ImportInfo; regex,Regex; std::path,Path; tree_sitter,Parser; super::*,super::*
-calls[5]{target,methods}: regex,new|new(r"#\s*@dose\s*\n((?:#[^\n]*\n)*)").unwrap|new(r#""""[\s\S]*?@dose[\s\S]*?""""#).unwrap|new(r"#\s*@dose[^\n]*\n(?:#[^\n]*\n)*").unwrap; std::path,new; crate::parser,ParseError|parse_toon_block; tree_sitter,new; crate::types,default
+calls[5]{target,methods}: regex,new(r#""""[\s\S]*?@dose[\s\S]*?""""#).unwrap|new(r"#\s*@dose\s*\n((?:#[^\n]*\n)*)").unwrap|new(r"#\s*@dose[^\n]*\n(?:#[^\n]*\n)*").unwrap|new; crate::parser,parse_toon_block|ParseError; tree_sitter,new; std::path,new; crate::types,default

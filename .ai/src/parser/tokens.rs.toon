@@ -1,5 +1,5 @@
 purpose: Token counting utility using tiktoken for accurate LLM token estimation.
-tokens: ~617
+tokens: ~621
 exports[1]: count_tokens(fn)
 signatures[1]:
   count_tokens(fn): (text: &str) usize

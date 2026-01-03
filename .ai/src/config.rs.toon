@@ -12,4 +12,4 @@ signatures[9]:
   load(fn): (root: &Path) Self
   threshold_matcher(fn): (&self) ThresholdMatcher
 imports[6]{from,items}: globset,Glob|GlobSet|GlobSetBuilder; serde,Deserialize; std,fs; std::path,Path; super::*,super::*; tempfile,TempDir
-calls[4]{target,methods}: globset,new; std::path,new; std,write(temp_dir.path().join("luny.toml"), config_content).unwrap|write|read_to_string; tempfile,new().unwrap|new
+calls[4]{target,methods}: std,read_to_string|write|write(temp_dir.path().join("luny.toml"), config_content).unwrap; tempfile,new|new().unwrap; std::path,new; globset,new

@@ -52,6 +52,9 @@ pub enum Commands {
 
     /// Strip @dose comments from source files
     Strip(StripArgs),
+
+    /// Watch for file changes and regenerate TOON DOSE files
+    Watch(WatchArgs),
 }
 
 /// Common options shared between generate and validate commands
@@ -167,6 +170,24 @@ pub struct StripArgs {
     /// Experimental: aggressive minification using AST-aware whitespace removal (preserves string literals)
     #[arg(long)]
     pub minify_extreme: bool,
+}
+
+#[derive(Args, Default)]
+pub struct WatchArgs {
+    /// Specific files or directories to watch
+    #[arg(value_name = "PATH")]
+    pub paths: Vec<PathBuf>,
+
+    /// Debounce delay in milliseconds
+    #[arg(long, default_value_t = 100)]
+    pub debounce: u64,
+
+    /// Clear screen before each update
+    #[arg(long)]
+    pub clear: bool,
+
+    #[command(flatten)]
+    pub common: CommonOptions,
 }
 
 #[cfg(test)]
@@ -319,6 +340,39 @@ mod tests {
         assert!(cli.verbose);
     }
 
+    /// Comprehensive test for watch command and all its options
+    #[test]
+    fn test_parse_watch() {
+        // Default values
+        let cli = Cli::try_parse_from(["luny", "watch"]).unwrap();
+        let Commands::Watch(args) = cli.command else {
+            panic!("Expected Watch")
+        };
+        assert!(args.paths.is_empty());
+        assert_eq!(args.debounce, 100);
+        assert!(!args.clear);
+
+        // With paths
+        let cli = Cli::try_parse_from(["luny", "watch", "src/", "lib/"]).unwrap();
+        let Commands::Watch(args) = cli.command else {
+            panic!("Expected Watch")
+        };
+        assert_eq!(args.paths.len(), 2);
+
+        // Flags: --debounce, --clear
+        let cli = Cli::try_parse_from(["luny", "watch", "--debounce", "200"]).unwrap();
+        let Commands::Watch(args) = cli.command else {
+            panic!("Expected Watch")
+        };
+        assert_eq!(args.debounce, 200);
+
+        let cli = Cli::try_parse_from(["luny", "watch", "--clear"]).unwrap();
+        let Commands::Watch(args) = cli.command else {
+            panic!("Expected Watch")
+        };
+        assert!(args.clear);
+    }
+
     /// Test error cases
     #[test]
     fn test_error_cases() {
@@ -335,6 +389,7 @@ mod tests {
         assert!(help.contains("generate"));
         assert!(help.contains("validate"));
         assert!(help.contains("strip"));
+        assert!(help.contains("watch"));
         assert!(help.contains("TOON") || help.contains("DOSE"));
     }
 }

@@ -1,8 +1,8 @@
 purpose: This module parses C# source files to extract public classes, interfaces, structs, enums, records, and methods. It uses tree-sitter for robust parsing and respects C# visibility modifiers.
-tokens: ~3002
+tokens: ~3006
 exports[3]: CSharpParser(struct), new(method(CSharpParser)), new(fn)
 signatures[2]:
   CSharpParser(struct): { }
   new(fn): () Self
 imports[6]{from,items}: crate::parser,toon_comment|LanguageParser|ParseError; crate::types,ASTInfo|ExportInfo|ExtractedComments|ImportInfo; regex,Regex; std::path,Path; tree_sitter,Parser; super::*,super::*
-calls[5]{target,methods}: crate::parser,ParseError|parse_toon_block; regex,new(r"///\s*@dose[^\n]*\n(?:///[^\n]*\n)*").unwrap|new(r"/\*\*[\s\S]*?@dose[\s\S]*?\*/").unwrap|new|new(r"///\s*@dose\s*\n((?:///[^\n]*\n)*)").unwrap; std::path,new; crate::types,default; tree_sitter,new
+calls[5]{target,methods}: tree_sitter,new; std::path,new; crate::types,default; crate::parser,ParseError|parse_toon_block; regex,new(r"/\*\*[\s\S]*?@dose[\s\S]*?\*/").unwrap|new(r"///\s*@dose\s*\n((?:///[^\n]*\n)*)").unwrap|new|new(r"///\s*@dose[^\n]*\n(?:///[^\n]*\n)*").unwrap

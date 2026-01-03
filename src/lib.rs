@@ -23,13 +23,15 @@
 pub mod cli;
 pub mod commands;
 pub mod config;
+pub mod dependency;
 pub mod exclusion;
 pub mod formatter;
 pub mod parser;
 pub mod types;
 
 // Re-export main types for convenience
-pub use cli::{Cli, Commands, GenerateArgs, StripArgs, ValidateArgs};
+pub use cli::{Cli, Commands, GenerateArgs, StripArgs, ValidateArgs, WatchArgs};
+pub use dependency::{AffectedFiles, DependencyGraph};
 pub use config::Config;
 pub use exclusion::ExclusionConfig;
 pub use formatter::{format_toon, parse_toon};

@@ -1,8 +1,8 @@
 purpose: This module parses Ruby source files to extract classes, modules, methods, and require/include statements. It uses tree-sitter for robust parsing and follows Ruby conventions for determining which items are public exports.
-tokens: ~2723
+tokens: ~2727
 exports[3]: RubyParser(struct), new(method(RubyParser)), new(fn)
 signatures[2]:
   RubyParser(struct): { }
   new(fn): () Self
 imports[6]{from,items}: crate::parser,toon_comment|LanguageParser|ParseError; crate::types,ASTInfo|ExportInfo|ExtractedComments|ImportInfo; regex,Regex; std::path,Path; tree_sitter,Parser; super::*,super::*
-calls[5]{target,methods}: tree_sitter,new; regex,new(r"#\s*@dose[^\n]*\n(?:#[^\n]*\n)*").unwrap|new(r"=begin[\s\S]*?@dose[\s\S]*?=end").unwrap|new|new(r"#\s*@dose\s*\n((?:#[^\n]*\n)*)").unwrap; std::path,new; crate::types,default; crate::parser,ParseError|parse_toon_block
+calls[5]{target,methods}: tree_sitter,new; crate::parser,parse_toon_block|ParseError; crate::types,default; regex,new|new(r"=begin[\s\S]*?@dose[\s\S]*?=end").unwrap|new(r"#\s*@dose\s*\n((?:#[^\n]*\n)*)").unwrap|new(r"#\s*@dose[^\n]*\n(?:#[^\n]*\n)*").unwrap; std::path,new

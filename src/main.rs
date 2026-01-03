@@ -23,7 +23,7 @@
 use anyhow::Context;
 use clap::Parser;
 use luny::cli::{Cli, Commands};
-use luny::commands::{run_generate, run_strip, run_validate};
+use luny::commands::{run_generate, run_strip, run_validate, run_watch};
 use std::env;
 
 fn main() {
@@ -46,5 +46,6 @@ fn run() -> anyhow::Result<()> {
         Commands::Generate(args) => run_generate(&args, &root, cli.verbose),
         Commands::Validate(args) => run_validate(&args, &root, cli.verbose),
         Commands::Strip(args) => run_strip(&args, &root, cli.verbose),
+        Commands::Watch(args) => run_watch(&args, &root, cli.verbose),
     }
 }
