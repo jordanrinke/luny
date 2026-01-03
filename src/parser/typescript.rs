@@ -34,11 +34,10 @@
 
 use crate::parser::{toon_comment, LanguageParser, ParseError};
 use crate::types::{
-    ASTInfo, CallInfo, ExportInfo, ExtractedComments, FunctionAnnotation, ImportInfo,
-    SignatureInfo,
+    ASTInfo, CallInfo, ExportInfo, ExtractedComments, FunctionAnnotation, ImportInfo, SignatureInfo,
 };
-use std::collections::{HashMap, HashSet};
 use regex::Regex;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use tree_sitter::{Node, Parser};
 
@@ -99,7 +98,13 @@ impl TypeScriptParser {
                         let name = self.node_text(name_node, source);
                         let kind = if self.returns_jsx(node, source) {
                             "component"
-                        } else if name.starts_with("use") && name.chars().nth(3).map(|c| c.is_uppercase()).unwrap_or(false) {
+                        } else if name.starts_with("use")
+                            && name
+                                .chars()
+                                .nth(3)
+                                .map(|c| c.is_uppercase())
+                                .unwrap_or(false)
+                        {
                             "hook"
                         } else {
                             "fn"
@@ -113,7 +118,8 @@ impl TypeScriptParser {
                             if declarator.kind() == "variable_declarator" {
                                 if let Some(name_node) = declarator.child_by_field_name("name") {
                                     let name = self.node_text(name_node, source);
-                                    let kind = self.infer_kind_from_declarator(declarator, &name, source);
+                                    let kind =
+                                        self.infer_kind_from_declarator(declarator, &name, source);
                                     defs.insert(name, kind);
                                 }
                             }
@@ -192,7 +198,13 @@ impl TypeScriptParser {
             match value.kind() {
                 "arrow_function" | "function" | "function_expression" => {
                     // Check if it's a hook by naming convention (useXxx)
-                    if name.starts_with("use") && name.chars().nth(3).map(|c| c.is_uppercase()).unwrap_or(false) {
+                    if name.starts_with("use")
+                        && name
+                            .chars()
+                            .nth(3)
+                            .map(|c| c.is_uppercase())
+                            .unwrap_or(false)
+                    {
                         return "hook".to_string();
                     }
                     // Check if it returns JSX (component) by AST analysis
@@ -218,7 +230,11 @@ impl TypeScriptParser {
     /// Check if type annotation is a React component type
     fn is_react_component_type(&self, type_node: Node, source: &str) -> bool {
         // Look for type_identifier or generic_type nodes
-        self.find_type_name(type_node, source, &["FC", "FunctionComponent", "ComponentType", "Element"])
+        self.find_type_name(
+            type_node,
+            source,
+            &["FC", "FunctionComponent", "ComponentType", "Element"],
+        )
     }
 
     /// Recursively search for specific type names in a type annotation
@@ -230,7 +246,8 @@ impl TypeScriptParser {
             }
             "member_expression" | "nested_type_identifier" => {
                 // Check the property/right side for React.FC etc
-                if let Some(prop) = node.child_by_field_name("property")
+                if let Some(prop) = node
+                    .child_by_field_name("property")
                     .or_else(|| node.child_by_field_name("name"))
                 {
                     let name = self.node_text(prop, source);
@@ -315,7 +332,12 @@ impl TypeScriptParser {
         }
     }
 
-    fn parse_export_statement(&self, node: Node, source: &str, definitions: &HashMap<String, String>) -> Vec<ExportInfo> {
+    fn parse_export_statement(
+        &self,
+        node: Node,
+        source: &str,
+        definitions: &HashMap<String, String>,
+    ) -> Vec<ExportInfo> {
         let mut exports = Vec::new();
 
         // Look for declaration child
@@ -329,7 +351,13 @@ impl TypeScriptParser {
                             let kind = definitions.get(&name).cloned().unwrap_or_else(|| {
                                 if self.returns_jsx(child, source) {
                                     "component".to_string()
-                                } else if name.starts_with("use") && name.chars().nth(3).map(|c| c.is_uppercase()).unwrap_or(false) {
+                                } else if name.starts_with("use")
+                                    && name
+                                        .chars()
+                                        .nth(3)
+                                        .map(|c| c.is_uppercase())
+                                        .unwrap_or(false)
+                                {
                                     "hook".to_string()
                                 } else {
                                     "fn".to_string()
@@ -356,8 +384,12 @@ impl TypeScriptParser {
                                     {
                                         let name = self.node_text(name_node, source);
                                         // Use collected definition kind
-                                        let kind = definitions.get(&name).cloned()
-                                            .unwrap_or_else(|| self.infer_kind_from_declarator(declarator, &name, source));
+                                        let kind =
+                                            definitions.get(&name).cloned().unwrap_or_else(|| {
+                                                self.infer_kind_from_declarator(
+                                                    declarator, &name, source,
+                                                )
+                                            });
                                         exports.push(ExportInfo { name, kind });
                                     }
                                 }
@@ -399,7 +431,9 @@ impl TypeScriptParser {
                                     if let Some(name_node) = spec.child_by_field_name("name") {
                                         let name = self.node_text(name_node, source);
                                         // Look up the actual definition kind
-                                        let kind = definitions.get(&name).cloned()
+                                        let kind = definitions
+                                            .get(&name)
+                                            .cloned()
                                             .unwrap_or_else(|| "const".to_string());
                                         exports.push(ExportInfo { name, kind });
                                     }
@@ -456,7 +490,11 @@ impl TypeScriptParser {
             if let Some(child) = node.child(i) {
                 match child.kind() {
                     "string" | "string_fragment" => {
-                        from = self.node_text(child, source).trim_matches('"').trim_matches('\'').to_string();
+                        from = self
+                            .node_text(child, source)
+                            .trim_matches('"')
+                            .trim_matches('\'')
+                            .to_string();
                     }
                     "import_clause" => {
                         self.extract_import_items(child, source, &mut items);
@@ -631,7 +669,12 @@ impl TypeScriptParser {
     }
 
     /// Extract signatures for exported functions/components
-    fn extract_signatures(&self, root: Node, source: &str, exports: &[ExportInfo]) -> Vec<SignatureInfo> {
+    fn extract_signatures(
+        &self,
+        root: Node,
+        source: &str,
+        exports: &[ExportInfo],
+    ) -> Vec<SignatureInfo> {
         let export_names: HashSet<&str> = exports.iter().map(|e| e.name.as_str()).collect();
         let mut signatures = Vec::new();
         let mut cursor = root.walk();
@@ -661,7 +704,11 @@ impl TypeScriptParser {
                     for i in 0..node.child_count() {
                         if let Some(declarator) = node.child(i) {
                             if declarator.kind() == "variable_declarator" {
-                                if let Some(sig) = self.extract_variable_signature(declarator, source, export_names) {
+                                if let Some(sig) = self.extract_variable_signature(
+                                    declarator,
+                                    source,
+                                    export_names,
+                                ) {
                                     signatures.push(sig);
                                 }
                             }
@@ -669,12 +716,14 @@ impl TypeScriptParser {
                     }
                 }
                 "type_alias_declaration" => {
-                    if let Some(sig) = self.extract_type_alias_signature(node, source, export_names) {
+                    if let Some(sig) = self.extract_type_alias_signature(node, source, export_names)
+                    {
                         signatures.push(sig);
                     }
                 }
                 "interface_declaration" => {
-                    if let Some(sig) = self.extract_interface_signature(node, source, export_names) {
+                    if let Some(sig) = self.extract_interface_signature(node, source, export_names)
+                    {
                         signatures.push(sig);
                     }
                 }
@@ -708,18 +757,26 @@ impl TypeScriptParser {
         // Determine kind from function analysis
         let kind = if self.returns_jsx(node, source) {
             "component".to_string()
-        } else if name.starts_with("use") && name.chars().nth(3).map(|c| c.is_uppercase()).unwrap_or(false) {
+        } else if name.starts_with("use")
+            && name
+                .chars()
+                .nth(3)
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+        {
             "hook".to_string()
         } else {
             "fn".to_string()
         };
 
         // Build signature from parameters and return type
-        let params = node.child_by_field_name("parameters")
+        let params = node
+            .child_by_field_name("parameters")
             .map(|p| self.node_text(p, source))
             .unwrap_or_else(|| "()".to_string());
 
-        let return_type = node.child_by_field_name("return_type")
+        let return_type = node
+            .child_by_field_name("return_type")
             .map(|r| self.node_text(r, source))
             .unwrap_or_default();
 
@@ -729,7 +786,11 @@ impl TypeScriptParser {
             format!("{} {}", params, return_type)
         };
 
-        Some(SignatureInfo { name, kind, signature })
+        Some(SignatureInfo {
+            name,
+            kind,
+            signature,
+        })
     }
 
     fn extract_variable_signature(
@@ -756,7 +817,10 @@ impl TypeScriptParser {
 
         let signature = if let Some(type_node) = type_ann {
             // Has explicit type annotation
-            self.node_text(type_node, source).trim_start_matches(':').trim().to_string()
+            self.node_text(type_node, source)
+                .trim_start_matches(':')
+                .trim()
+                .to_string()
         } else if let Some(val) = value {
             // Infer from value
             self.infer_signature_from_value(val, source)
@@ -768,18 +832,24 @@ impl TypeScriptParser {
             return None;
         }
 
-        Some(SignatureInfo { name, kind, signature })
+        Some(SignatureInfo {
+            name,
+            kind,
+            signature,
+        })
     }
 
     fn infer_signature_from_value(&self, node: Node, source: &str) -> String {
         match node.kind() {
             "arrow_function" => {
-                let params = node.child_by_field_name("parameters")
+                let params = node
+                    .child_by_field_name("parameters")
                     .or_else(|| node.child_by_field_name("parameter"))
                     .map(|p| self.node_text(p, source))
                     .unwrap_or_else(|| "()".to_string());
 
-                let return_type = node.child_by_field_name("return_type")
+                let return_type = node
+                    .child_by_field_name("return_type")
                     .map(|r| self.node_text(r, source))
                     .unwrap_or_default();
 
@@ -790,12 +860,13 @@ impl TypeScriptParser {
                 }
             }
             "function" | "function_expression" => {
-                let params = node.child_by_field_name("parameters")
+                let params = node
+                    .child_by_field_name("parameters")
                     .map(|p| self.node_text(p, source))
                     .unwrap_or_else(|| "()".to_string());
                 params
             }
-            _ => String::new()
+            _ => String::new(),
         }
     }
 
@@ -814,12 +885,14 @@ impl TypeScriptParser {
         }
 
         // Get type parameters if present (e.g., <T, U>)
-        let type_params = node.child_by_field_name("type_parameters")
+        let type_params = node
+            .child_by_field_name("type_parameters")
             .map(|p| self.node_text(p, source))
             .unwrap_or_default();
 
         // Get the value (right side of =)
-        let value = node.child_by_field_name("value")
+        let value = node
+            .child_by_field_name("value")
             .map(|v| self.node_text(v, source))
             .unwrap_or_default();
 
@@ -854,7 +927,8 @@ impl TypeScriptParser {
         }
 
         // Get type parameters if present
-        let type_params = node.child_by_field_name("type_parameters")
+        let type_params = node
+            .child_by_field_name("type_parameters")
             .map(|p| self.node_text(p, source))
             .unwrap_or_default();
 
@@ -897,7 +971,8 @@ impl TypeScriptParser {
                         if let Some(name_node) = child.child_by_field_name("name") {
                             let field_name = self.node_text(name_node, source);
                             let optional = child.child_by_field_name("optional").is_some();
-                            let type_ann = child.child_by_field_name("type")
+                            let type_ann = child
+                                .child_by_field_name("type")
                                 .map(|t| self.node_text(t, source))
                                 .unwrap_or_default();
 
@@ -932,7 +1007,12 @@ impl TypeScriptParser {
     }
 
     /// Find the name of the next function/export declaration after a given byte position
-    fn find_next_function_name(&self, root: &Node, source: &str, after_pos: usize) -> Option<String> {
+    fn find_next_function_name(
+        &self,
+        root: &Node,
+        source: &str,
+        after_pos: usize,
+    ) -> Option<String> {
         let mut cursor = root.walk();
         self.find_next_function_recursive(&mut cursor, source, after_pos)
     }
@@ -1107,9 +1187,15 @@ impl LanguageParser for TypeScriptParser {
         for cap in inline_pattern.captures_iter(source) {
             let pos = cap.get(0).unwrap().end();
             let (field, value) = if let Some(f) = cap.get(1) {
-                (f.as_str().to_string(), cap.get(2).unwrap().as_str().trim().to_string())
+                (
+                    f.as_str().to_string(),
+                    cap.get(2).unwrap().as_str().trim().to_string(),
+                )
             } else {
-                (cap.get(3).unwrap().as_str().to_string(), cap.get(4).unwrap().as_str().trim().to_string())
+                (
+                    cap.get(3).unwrap().as_str().to_string(),
+                    cap.get(4).unwrap().as_str().trim().to_string(),
+                )
             };
             inline_annotations.push((pos, field, value));
         }
@@ -1200,42 +1286,60 @@ mod tests {
     #[test]
     fn test_extract_ast_info() {
         let parser = TypeScriptParser::new();
-        let info = parser.extract_ast_info(TS_FIXTURE, Path::new("sample.ts")).unwrap();
+        let info = parser
+            .extract_ast_info(TS_FIXTURE, Path::new("sample.ts"))
+            .unwrap();
 
-        let mut exports: Vec<_> = info.exports.iter().map(|e| (&e.name[..], &e.kind[..])).collect();
+        let mut exports: Vec<_> = info
+            .exports
+            .iter()
+            .map(|e| (&e.name[..], &e.kind[..]))
+            .collect();
         exports.sort();
-        assert_eq!(exports, vec![
-            ("DEFAULT_CONFIG", "const"),
-            ("MemoizedComponent", "component"),
-            ("MyComponent", "component"),
-            ("ReactMemoComponent", "component"),
-            ("Result", "type"),
-            ("Status", "enum"),
-            ("ThemeContext", "context"),
-            ("UserConfig", "interface"),
-            ("UserId", "type"),
-            ("UserService", "class"),
-            ("createUser", "fn"),
-            ("defaultExport", "const"),
-            ("memo", "fn"),
-            ("saveUser", "fn"),
-            ("validateUser", "fn"),
-        ]);
+        assert_eq!(
+            exports,
+            vec![
+                ("DEFAULT_CONFIG", "const"),
+                ("MemoizedComponent", "component"),
+                ("MyComponent", "component"),
+                ("ReactMemoComponent", "component"),
+                ("Result", "type"),
+                ("Status", "enum"),
+                ("ThemeContext", "context"),
+                ("UserConfig", "interface"),
+                ("UserId", "type"),
+                ("UserService", "class"),
+                ("createUser", "fn"),
+                ("defaultExport", "const"),
+                ("memo", "fn"),
+                ("saveUser", "fn"),
+                ("validateUser", "fn"),
+            ]
+        );
 
         let mut imports: Vec<_> = info.imports.iter().map(|i| &i.from[..]).collect();
         imports.sort();
-        assert_eq!(imports, vec!["./other-module", "./types", "fs/promises", "path"]);
+        assert_eq!(
+            imports,
+            vec!["./other-module", "./types", "fs/promises", "path"]
+        );
 
         // Also verify TSX hooks/components detection
-        let tsx_info = parser.extract_ast_info(TSX_FIXTURE, Path::new("sample.tsx")).unwrap();
-        let hooks: Vec<_> = tsx_info.exports.iter()
+        let tsx_info = parser
+            .extract_ast_info(TSX_FIXTURE, Path::new("sample.tsx"))
+            .unwrap();
+        let hooks: Vec<_> = tsx_info
+            .exports
+            .iter()
             .filter(|e| e.kind == "hook")
             .map(|e| &e.name[..])
             .collect();
         assert!(hooks.contains(&"useUser"));
         assert!(hooks.contains(&"useToggle"));
 
-        let components: Vec<_> = tsx_info.exports.iter()
+        let components: Vec<_> = tsx_info
+            .exports
+            .iter()
             .filter(|e| e.kind == "component")
             .map(|e| &e.name[..])
             .collect();
@@ -1250,7 +1354,9 @@ mod tests {
         let block = comments.file_block.unwrap();
         assert_eq!(block.purpose.unwrap(), "Sample TypeScript fixture for testing the luny parser. This file contains various TypeScript constructs to verify extraction works correctly.");
 
-        let stripped = parser.strip_toon_comments(TS_FIXTURE, "sample.ts.toon").unwrap();
+        let stripped = parser
+            .strip_toon_comments(TS_FIXTURE, "sample.ts.toon")
+            .unwrap();
         assert!(stripped.contains("// @toon"));
         assert!(stripped.contains("sample.ts.toon"));
     }

@@ -21,7 +21,9 @@ fn parse_section_start(line: &str) -> Option<(String, Option<&str>)> {
 
     // Must be 1-3 words, letters/dashes/spaces only
     if name.is_empty()
-        || !name.chars().all(|c| c.is_alphabetic() || c == '-' || c == ' ')
+        || !name
+            .chars()
+            .all(|c| c.is_alphabetic() || c == '-' || c == ' ')
         || name.split_whitespace().count() > 3
     {
         return None;
@@ -75,7 +77,10 @@ pub fn parse_toon_block(content: &str) -> ToonCommentBlock {
             // First non-section line is purpose
             block.purpose = Some(trimmed.to_string());
         } else if trimmed.starts_with('-') || trimmed.starts_with('•') {
-            let item = trimmed.trim_start_matches('-').trim_start_matches('•').trim();
+            let item = trimmed
+                .trim_start_matches('-')
+                .trim_start_matches('•')
+                .trim();
             if !item.is_empty() {
                 // Also support semicolons within bulleted items
                 current_items.extend(parse_inline_items(item));
@@ -160,8 +165,20 @@ invariant: Must hold
 
         let we = block.when_editing.unwrap();
         assert_eq!(we.len(), 2);
-        assert_eq!(we[0], WhenEditingItem { text: "Critical".to_string(), important: true });
-        assert_eq!(we[1], WhenEditingItem { text: "Normal".to_string(), important: false });
+        assert_eq!(
+            we[0],
+            WhenEditingItem {
+                text: "Critical".to_string(),
+                important: true
+            }
+        );
+        assert_eq!(
+            we[1],
+            WhenEditingItem {
+                text: "Normal".to_string(),
+                important: false
+            }
+        );
 
         assert_eq!(block.do_not, Some(vec!["Never do this".to_string()]));
         assert_eq!(block.invariants, Some(vec!["Must hold".to_string()]));

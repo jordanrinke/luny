@@ -31,8 +31,7 @@
 
 use crate::parser::{toon_comment, LanguageParser, ParseError};
 use crate::types::{
-    ASTInfo, CallInfo, ExportInfo, ExtractedComments, ImportInfo, SignatureInfo,
-    ToonCommentBlock,
+    ASTInfo, CallInfo, ExportInfo, ExtractedComments, ImportInfo, SignatureInfo, ToonCommentBlock,
 };
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
@@ -62,7 +61,10 @@ impl GoParser {
 
     /// Check if identifier is exported (starts with uppercase)
     fn is_exported(&self, name: &str) -> bool {
-        name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+        name.chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
     }
 
     fn extract_exports(&self, root: Node, source: &str) -> Vec<ExportInfo> {
@@ -99,7 +101,8 @@ impl GoParser {
                         let name = self.node_text(name_node, source);
                         if self.is_exported(&name) {
                             // Get receiver type for context
-                            let receiver = node.child_by_field_name("receiver")
+                            let receiver = node
+                                .child_by_field_name("receiver")
                                 .map(|r| self.extract_receiver_type(r, source))
                                 .unwrap_or_default();
 
@@ -218,12 +221,14 @@ impl GoParser {
                         match child.kind() {
                             "import_spec" => {
                                 if let Some(path_node) = child.child_by_field_name("path") {
-                                    let path = self.node_text(path_node, source)
+                                    let path = self
+                                        .node_text(path_node, source)
                                         .trim_matches('"')
                                         .to_string();
 
                                     // Get alias if present
-                                    let alias = child.child_by_field_name("name")
+                                    let alias = child
+                                        .child_by_field_name("name")
                                         .map(|n| self.node_text(n, source));
 
                                     let items = if let Some(a) = alias {
@@ -242,18 +247,23 @@ impl GoParser {
                                 for j in 0..child.child_count() {
                                     if let Some(spec) = child.child(j) {
                                         if spec.kind() == "import_spec" {
-                                            if let Some(path_node) = spec.child_by_field_name("path") {
-                                                let path = self.node_text(path_node, source)
+                                            if let Some(path_node) =
+                                                spec.child_by_field_name("path")
+                                            {
+                                                let path = self
+                                                    .node_text(path_node, source)
                                                     .trim_matches('"')
                                                     .to_string();
 
-                                                let alias = spec.child_by_field_name("name")
+                                                let alias = spec
+                                                    .child_by_field_name("name")
                                                     .map(|n| self.node_text(n, source));
 
                                                 let items = if let Some(a) = alias {
                                                     vec![a]
                                                 } else {
-                                                    let pkg = path.rsplit('/').next().unwrap_or(&path);
+                                                    let pkg =
+                                                        path.rsplit('/').next().unwrap_or(&path);
                                                     vec![pkg.to_string()]
                                                 };
 
@@ -284,7 +294,11 @@ impl GoParser {
         let mut calls = Vec::new();
         let import_map: HashMap<&str, &str> = imports
             .iter()
-            .flat_map(|i| i.items.iter().map(move |item| (item.as_str(), i.from.as_str())))
+            .flat_map(|i| {
+                i.items
+                    .iter()
+                    .map(move |item| (item.as_str(), i.from.as_str()))
+            })
             .collect();
 
         let mut cursor = root.walk();
@@ -338,7 +352,12 @@ impl GoParser {
         }
     }
 
-    fn extract_signatures(&self, root: Node, source: &str, exports: &[ExportInfo]) -> Vec<SignatureInfo> {
+    fn extract_signatures(
+        &self,
+        root: Node,
+        source: &str,
+        exports: &[ExportInfo],
+    ) -> Vec<SignatureInfo> {
         let export_names: HashSet<&str> = exports.iter().map(|e| e.name.as_str()).collect();
         let mut signatures = Vec::new();
         let mut cursor = root.walk();
@@ -372,7 +391,9 @@ impl GoParser {
                     for i in 0..node.child_count() {
                         if let Some(spec) = node.child(i) {
                             if spec.kind() == "type_spec" {
-                                if let Some(sig) = self.extract_type_signature(spec, source, export_names) {
+                                if let Some(sig) =
+                                    self.extract_type_signature(spec, source, export_names)
+                                {
                                     signatures.push(sig);
                                 }
                             }
@@ -406,11 +427,13 @@ impl GoParser {
             return None;
         }
 
-        let params = node.child_by_field_name("parameters")
+        let params = node
+            .child_by_field_name("parameters")
             .map(|p| self.node_text(p, source))
             .unwrap_or_else(|| "()".to_string());
 
-        let result = node.child_by_field_name("result")
+        let result = node
+            .child_by_field_name("result")
             .map(|r| format!(" {}", self.node_text(r, source)))
             .unwrap_or_default();
 
@@ -436,15 +459,18 @@ impl GoParser {
             return None;
         }
 
-        let receiver = node.child_by_field_name("receiver")
+        let receiver = node
+            .child_by_field_name("receiver")
             .map(|r| self.node_text(r, source))
             .unwrap_or_default();
 
-        let params = node.child_by_field_name("parameters")
+        let params = node
+            .child_by_field_name("parameters")
             .map(|p| self.node_text(p, source))
             .unwrap_or_else(|| "()".to_string());
 
-        let result = node.child_by_field_name("result")
+        let result = node
+            .child_by_field_name("result")
             .map(|r| format!(" {}", self.node_text(r, source)))
             .unwrap_or_default();
 
@@ -494,7 +520,8 @@ impl GoParser {
                     for i in 0..body.child_count() {
                         if let Some(field) = body.child(i) {
                             if field.kind() == "field_declaration" {
-                                let field_text = self.node_text(field, source)
+                                let field_text = self
+                                    .node_text(field, source)
                                     .split_whitespace()
                                     .collect::<Vec<_>>()
                                     .join(" ");
@@ -520,7 +547,8 @@ impl GoParser {
                         if child.kind() == "method_spec" {
                             if let Some(name_node) = child.child_by_field_name("name") {
                                 let name = self.node_text(name_node, source);
-                                let params = child.child_by_field_name("parameters")
+                                let params = child
+                                    .child_by_field_name("parameters")
                                     .map(|p| self.node_text(p, source))
                                     .unwrap_or_else(|| "()".to_string());
                                 methods.push(format!("{}{}", name, params));
@@ -591,8 +619,14 @@ impl LanguageParser for GoParser {
         let single_pattern = Regex::new(r"//\s*@toon:\s*(\w+):\s*(.+)").unwrap();
         for cap in single_pattern.captures_iter(source) {
             if let (Some(key), Some(value)) = (cap.get(1), cap.get(2)) {
-                let block = comments.file_block.get_or_insert_with(ToonCommentBlock::default);
-                toon_comment::save_section(block, Some(key.as_str()), &[value.as_str().to_string()]);
+                let block = comments
+                    .file_block
+                    .get_or_insert_with(ToonCommentBlock::default);
+                toon_comment::save_section(
+                    block,
+                    Some(key.as_str()),
+                    &[value.as_str().to_string()],
+                );
             }
         }
 
@@ -631,45 +665,68 @@ mod tests {
     #[test]
     fn test_extract_ast_info() {
         let parser = GoParser::new();
-        let info = parser.extract_ast_info(GO_FIXTURE, Path::new("sample.go")).unwrap();
+        let info = parser
+            .extract_ast_info(GO_FIXTURE, Path::new("sample.go"))
+            .unwrap();
 
         // Check functions and types (non-method exports)
-        let mut non_method_exports: Vec<_> = info.exports.iter()
+        let mut non_method_exports: Vec<_> = info
+            .exports
+            .iter()
             .filter(|e| !e.kind.starts_with("method"))
             .map(|e| (&e.name[..], &e.kind[..]))
             .collect();
         non_method_exports.sort();
-        assert_eq!(non_method_exports, vec![
-            ("Cache", "struct"),
-            ("ConsoleLogger", "struct"),
-            ("CreateUser", "fn"),
-            ("DefaultConfig", "var"),
-            ("DefaultTimeout", "const"),
-            ("Filter", "fn"),
-            ("Logger", "interface"),
-            ("MaxRetries", "const"),
-            ("NewCache", "fn"),
-            ("NewConsoleLogger", "fn"),
-            ("NewUserService", "fn"),
-            ("Repository", "interface"),
-            ("UserConfig", "struct"),
-            ("UserID", "type"),
-            ("UserService", "struct"),
-            ("ValidateEmail", "fn"),
-            ("Version", "const"),
-        ]);
+        assert_eq!(
+            non_method_exports,
+            vec![
+                ("Cache", "struct"),
+                ("ConsoleLogger", "struct"),
+                ("CreateUser", "fn"),
+                ("DefaultConfig", "var"),
+                ("DefaultTimeout", "const"),
+                ("Filter", "fn"),
+                ("Logger", "interface"),
+                ("MaxRetries", "const"),
+                ("NewCache", "fn"),
+                ("NewConsoleLogger", "fn"),
+                ("NewUserService", "fn"),
+                ("Repository", "interface"),
+                ("UserConfig", "struct"),
+                ("UserID", "type"),
+                ("UserService", "struct"),
+                ("ValidateEmail", "fn"),
+                ("Version", "const"),
+            ]
+        );
 
         // Check methods are extracted with receiver types
-        let mut methods: Vec<_> = info.exports.iter()
+        let mut methods: Vec<_> = info
+            .exports
+            .iter()
             .filter(|e| e.kind.starts_with("method"))
             .map(|e| &e.name[..])
             .collect();
         methods.sort();
-        assert_eq!(methods, vec!["Debug", "Delete", "Error", "Get", "Get", "Info", "List", "Save", "Set"]);
+        assert_eq!(
+            methods,
+            vec!["Debug", "Delete", "Error", "Get", "Get", "Info", "List", "Save", "Set"]
+        );
 
         let mut imports: Vec<_> = info.imports.iter().map(|i| &i.from[..]).collect();
         imports.sort();
-        assert_eq!(imports, vec!["encoding/json", "fmt", "io/ioutil", "os", "path/filepath", "sync", "time"]);
+        assert_eq!(
+            imports,
+            vec![
+                "encoding/json",
+                "fmt",
+                "io/ioutil",
+                "os",
+                "path/filepath",
+                "sync",
+                "time"
+            ]
+        );
     }
 
     #[test]
@@ -679,7 +736,9 @@ mod tests {
         let block = comments.file_block.unwrap();
         assert_eq!(block.purpose.unwrap(), "Sample Go fixture for testing the luny Go parser. This file contains various Go constructs including structs, interfaces, functions, and methods to verify extraction works correctly.");
 
-        let stripped = parser.strip_toon_comments(GO_FIXTURE, "sample.go.toon").unwrap();
+        let stripped = parser
+            .strip_toon_comments(GO_FIXTURE, "sample.go.toon")
+            .unwrap();
         assert!(stripped.starts_with("// @toon -> sample.go.toon"));
     }
 }

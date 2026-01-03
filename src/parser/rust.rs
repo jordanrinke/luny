@@ -211,7 +211,8 @@ impl RustParser {
 
     fn extract_impl_exports(&self, impl_node: Node, source: &str, exports: &mut Vec<ExportInfo>) {
         // Get the type being implemented
-        let impl_type = impl_node.child_by_field_name("type")
+        let impl_type = impl_node
+            .child_by_field_name("type")
             .map(|t| self.node_text(t, source))
             .unwrap_or_default();
 
@@ -363,7 +364,11 @@ impl RustParser {
         let mut calls = Vec::new();
         let import_map: HashMap<&str, &str> = imports
             .iter()
-            .flat_map(|i| i.items.iter().map(move |item| (item.as_str(), i.from.as_str())))
+            .flat_map(|i| {
+                i.items
+                    .iter()
+                    .map(move |item| (item.as_str(), i.from.as_str()))
+            })
             .collect();
 
         let mut cursor = root.walk();
@@ -416,7 +421,12 @@ impl RustParser {
         }
     }
 
-    fn extract_signatures(&self, root: Node, source: &str, exports: &[ExportInfo]) -> Vec<SignatureInfo> {
+    fn extract_signatures(
+        &self,
+        root: Node,
+        source: &str,
+        exports: &[ExportInfo],
+    ) -> Vec<SignatureInfo> {
         let export_names: HashSet<&str> = exports.iter().map(|e| e.name.as_str()).collect();
         let mut signatures = Vec::new();
         let mut cursor = root.walk();
@@ -457,7 +467,8 @@ impl RustParser {
                     }
                 }
                 "type_item" => {
-                    if let Some(sig) = self.extract_type_alias_signature(node, source, export_names) {
+                    if let Some(sig) = self.extract_type_alias_signature(node, source, export_names)
+                    {
                         signatures.push(sig);
                     }
                 }
@@ -488,15 +499,18 @@ impl RustParser {
             return None;
         }
 
-        let type_params = node.child_by_field_name("type_parameters")
+        let type_params = node
+            .child_by_field_name("type_parameters")
             .map(|p| self.node_text(p, source))
             .unwrap_or_default();
 
-        let params = node.child_by_field_name("parameters")
+        let params = node
+            .child_by_field_name("parameters")
             .map(|p| self.node_text(p, source))
             .unwrap_or_else(|| "()".to_string());
 
-        let return_type = node.child_by_field_name("return_type")
+        let return_type = node
+            .child_by_field_name("return_type")
             .map(|r| format!(" {}", self.node_text(r, source)))
             .unwrap_or_default();
 
@@ -522,7 +536,8 @@ impl RustParser {
             return None;
         }
 
-        let type_params = node.child_by_field_name("type_parameters")
+        let type_params = node
+            .child_by_field_name("type_parameters")
             .map(|p| self.node_text(p, source))
             .unwrap_or_default();
 
@@ -535,7 +550,9 @@ impl RustParser {
             "".to_string()
         };
 
-        let signature = format!("{} {{ {} }}", type_params, fields).trim().to_string();
+        let signature = format!("{} {{ {} }}", type_params, fields)
+            .trim()
+            .to_string();
 
         Some(SignatureInfo {
             name,
@@ -552,7 +569,8 @@ impl RustParser {
                 if child.kind() == "field_declaration" {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let field_name = self.node_text(name_node, source);
-                        let field_type = child.child_by_field_name("type")
+                        let field_type = child
+                            .child_by_field_name("type")
                             .map(|t| self.node_text(t, source))
                             .unwrap_or_default();
                         fields.push(format!("{}: {}", field_name, field_type));
@@ -582,7 +600,8 @@ impl RustParser {
             return None;
         }
 
-        let type_params = node.child_by_field_name("type_parameters")
+        let type_params = node
+            .child_by_field_name("type_parameters")
             .map(|p| self.node_text(p, source))
             .unwrap_or_default();
 
@@ -604,7 +623,9 @@ impl RustParser {
             }
         }
 
-        let signature = format!("{} {{ {} }}", type_params, variants.join(" | ")).trim().to_string();
+        let signature = format!("{} {{ {} }}", type_params, variants.join(" | "))
+            .trim()
+            .to_string();
 
         Some(SignatureInfo {
             name,
@@ -626,7 +647,8 @@ impl RustParser {
             return None;
         }
 
-        let type_params = node.child_by_field_name("type_parameters")
+        let type_params = node
+            .child_by_field_name("type_parameters")
             .map(|p| self.node_text(p, source))
             .unwrap_or_default();
 
@@ -635,10 +657,12 @@ impl RustParser {
         if let Some(body) = node.child_by_field_name("body") {
             for i in 0..body.child_count() {
                 if let Some(child) = body.child(i) {
-                    if child.kind() == "function_signature_item" || child.kind() == "function_item" {
+                    if child.kind() == "function_signature_item" || child.kind() == "function_item"
+                    {
                         if let Some(name_node) = child.child_by_field_name("name") {
                             let method_name = self.node_text(name_node, source);
-                            let params = child.child_by_field_name("parameters")
+                            let params = child
+                                .child_by_field_name("parameters")
                                 .map(|p| self.node_text(p, source))
                                 .unwrap_or_else(|| "()".to_string());
                             methods.push(format!("{}{}", method_name, params));
@@ -652,7 +676,9 @@ impl RustParser {
             }
         }
 
-        let signature = format!("{} {{ {} }}", type_params, methods.join("; ")).trim().to_string();
+        let signature = format!("{} {{ {} }}", type_params, methods.join("; "))
+            .trim()
+            .to_string();
 
         Some(SignatureInfo {
             name,
@@ -674,11 +700,13 @@ impl RustParser {
             return None;
         }
 
-        let type_params = node.child_by_field_name("type_parameters")
+        let type_params = node
+            .child_by_field_name("type_parameters")
             .map(|p| self.node_text(p, source))
             .unwrap_or_default();
 
-        let type_value = node.child_by_field_name("type")
+        let type_value = node
+            .child_by_field_name("type")
             .map(|t| self.node_text(t, source))
             .unwrap_or_default();
 
@@ -804,50 +832,59 @@ mod tests {
     #[test]
     fn test_extract_ast_info() {
         let parser = RustParser::new();
-        let info = parser.extract_ast_info(RS_FIXTURE, Path::new("sample.rs")).unwrap();
+        let info = parser
+            .extract_ast_info(RS_FIXTURE, Path::new("sample.rs"))
+            .unwrap();
 
-        let mut exports: Vec<_> = info.exports.iter()
+        let mut exports: Vec<_> = info
+            .exports
+            .iter()
             .map(|e| (&e.name[..], &e.kind[..]))
             .collect();
         exports.sort();
-        assert_eq!(exports, vec![
-            ("Cache", "struct"),
-            ("DEFAULT_TIMEOUT", "const"),
-            ("Error", "enum"),
-            ("GLOBAL_COUNTER", "static"),
-            ("MAX_RETRIES", "const"),
-            ("Repository", "trait"),
-            ("Result", "type"),
-            ("UserConfig", "struct"),
-            ("UserId", "type"),
-            ("UserService", "struct"),
-            ("UserStatus", "enum"),
-            ("VERSION", "const"),
-            ("add_setting", "fn"),
-            ("add_setting", "method(UserConfig)"),
-            ("clear_cache", "fn"),
-            ("clear_cache", "method(UserService)"),
-            ("create_user", "fn"),
-            ("get", "fn"),
-            ("get", "method(Cache<K, V>)"),
-            ("helper", "fn"),
-            ("log_info", "macro"),
-            ("new", "fn"),
-            ("new", "fn"),
-            ("new", "fn"),
-            ("new", "method(Cache<K, V>)"),
-            ("new", "method(UserConfig)"),
-            ("new", "method(UserService)"),
-            ("set", "fn"),
-            ("set", "method(Cache<K, V>)"),
-            ("test_example_validation", "test"),
-            ("utils", "mod"),
-            ("validate_email", "fn"),
-            ("with_email", "fn"),
-            ("with_email", "method(UserConfig)"),
-        ]);
+        assert_eq!(
+            exports,
+            vec![
+                ("Cache", "struct"),
+                ("DEFAULT_TIMEOUT", "const"),
+                ("Error", "enum"),
+                ("GLOBAL_COUNTER", "static"),
+                ("MAX_RETRIES", "const"),
+                ("Repository", "trait"),
+                ("Result", "type"),
+                ("UserConfig", "struct"),
+                ("UserId", "type"),
+                ("UserService", "struct"),
+                ("UserStatus", "enum"),
+                ("VERSION", "const"),
+                ("add_setting", "fn"),
+                ("add_setting", "method(UserConfig)"),
+                ("clear_cache", "fn"),
+                ("clear_cache", "method(UserService)"),
+                ("create_user", "fn"),
+                ("get", "fn"),
+                ("get", "method(Cache<K, V>)"),
+                ("helper", "fn"),
+                ("log_info", "macro"),
+                ("new", "fn"),
+                ("new", "fn"),
+                ("new", "fn"),
+                ("new", "method(Cache<K, V>)"),
+                ("new", "method(UserConfig)"),
+                ("new", "method(UserService)"),
+                ("set", "fn"),
+                ("set", "method(Cache<K, V>)"),
+                ("test_example_validation", "test"),
+                ("utils", "mod"),
+                ("validate_email", "fn"),
+                ("with_email", "fn"),
+                ("with_email", "method(UserConfig)"),
+            ]
+        );
 
-        let import_items: Vec<_> = info.imports.iter()
+        let import_items: Vec<_> = info
+            .imports
+            .iter()
             .flat_map(|i| i.items.iter().map(|s| s.as_str()))
             .collect();
         assert!(import_items.contains(&"HashMap"));
@@ -861,7 +898,9 @@ mod tests {
         let block = comments.file_block.unwrap();
         assert_eq!(block.purpose.unwrap(), "Sample Rust fixture for testing the luny Rust parser. This file contains various Rust constructs including structs, enums, traits, and impl blocks to verify extraction works correctly.");
 
-        let stripped = parser.strip_toon_comments(RS_FIXTURE, "sample.rs.toon").unwrap();
+        let stripped = parser
+            .strip_toon_comments(RS_FIXTURE, "sample.rs.toon")
+            .unwrap();
         assert!(stripped.starts_with("// @toon -> sample.rs.toon"));
     }
 }

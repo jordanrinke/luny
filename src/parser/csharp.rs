@@ -322,39 +322,51 @@ mod tests {
     #[test]
     fn test_extract_ast_info() {
         let parser = CSharpParser::new();
-        let info = parser.extract_ast_info(CS_FIXTURE, Path::new("sample.cs")).unwrap();
+        let info = parser
+            .extract_ast_info(CS_FIXTURE, Path::new("sample.cs"))
+            .unwrap();
 
-        let mut exports: Vec<_> = info.exports.iter().map(|e| (&e.name[..], &e.kind[..])).collect();
+        let mut exports: Vec<_> = info
+            .exports
+            .iter()
+            .map(|e| (&e.name[..], &e.kind[..]))
+            .collect();
         exports.sort();
-        assert_eq!(exports, vec![
-            ("BaseEntity", "class"),
-            ("Constants", "class"),
-            ("DeleteAsync", "method"),
-            ("Get", "method"),
-            ("GetAllAsync", "method"),
-            ("GetByIdAsync", "method"),
-            ("IRepository", "interface"),
-            ("SaveAsync", "method"),
-            ("Set", "method"),
-            ("StringExtensions", "class"),
-            ("ToCamelCase", "method"),
-            ("ToPascalCase", "method"),
-            ("Truncate", "method"),
-            ("UserConfig", "record"),
-            ("UserService", "class"),
-            ("UserStatus", "enum"),
-        ]);
+        assert_eq!(
+            exports,
+            vec![
+                ("BaseEntity", "class"),
+                ("Constants", "class"),
+                ("DeleteAsync", "method"),
+                ("Get", "method"),
+                ("GetAllAsync", "method"),
+                ("GetByIdAsync", "method"),
+                ("IRepository", "interface"),
+                ("SaveAsync", "method"),
+                ("Set", "method"),
+                ("StringExtensions", "class"),
+                ("ToCamelCase", "method"),
+                ("ToPascalCase", "method"),
+                ("Truncate", "method"),
+                ("UserConfig", "record"),
+                ("UserService", "class"),
+                ("UserStatus", "enum"),
+            ]
+        );
 
         let mut imports: Vec<_> = info.imports.iter().map(|i| &i.from[..]).collect();
         imports.sort();
-        assert_eq!(imports, vec![
-            "System",
-            "System.Collections.Generic",
-            "System.IO",
-            "System.Linq",
-            "System.Text.Json",
-            "System.Threading.Tasks",
-        ]);
+        assert_eq!(
+            imports,
+            vec![
+                "System",
+                "System.Collections.Generic",
+                "System.IO",
+                "System.Linq",
+                "System.Text.Json",
+                "System.Threading.Tasks",
+            ]
+        );
     }
 
     #[test]
@@ -364,7 +376,9 @@ mod tests {
         let block = comments.file_block.unwrap();
         assert_eq!(block.purpose.unwrap(), "Sample C# fixture for testing the luny C# parser. This file contains various C# constructs including classes, interfaces, records, and async patterns to verify extraction works correctly.");
 
-        let stripped = parser.strip_toon_comments(CS_FIXTURE, "sample.cs.toon").unwrap();
+        let stripped = parser
+            .strip_toon_comments(CS_FIXTURE, "sample.cs.toon")
+            .unwrap();
         assert!(stripped.starts_with("// @toon -> sample.cs.toon"));
     }
 }

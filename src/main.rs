@@ -20,10 +20,10 @@
 //!     - The --root flag can be placed before or after the subcommand due to global flag
 //!     - Verbose mode is also a global flag that affects all commands
 
+use anyhow::Context;
 use clap::Parser;
 use luny::cli::{Cli, Commands};
 use luny::commands::{run_generate, run_strip, run_validate};
-use anyhow::Context;
 use std::env;
 
 fn main() {

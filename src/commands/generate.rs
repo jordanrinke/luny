@@ -141,7 +141,8 @@ fn collect_files(
                 .follow_links(true)
                 .into_iter()
                 .filter_entry(|e| {
-                    !is_excluded_dir(e) && is_allowed_symlink_target(e, root_canon, args.unsafe_follow)
+                    !is_excluded_dir(e)
+                        && is_allowed_symlink_target(e, root_canon, args.unsafe_follow)
                 })
                 .filter_map(|e| e.ok())
             {
@@ -229,10 +230,14 @@ fn build_dependency_graph(
         // Process calls to build called_by
         for call in &ast_info.calls {
             let target = resolve_import_path(&call.target, path, root);
-            graph.called_by.entry(target).or_default().push(CalledByInfo {
-                from: file_relative.clone(),
-                function: call.method.clone(),
-            });
+            graph
+                .called_by
+                .entry(target)
+                .or_default()
+                .push(CalledByInfo {
+                    from: file_relative.clone(),
+                    function: call.method.clone(),
+                });
         }
     }
 
@@ -294,7 +299,10 @@ fn process_file(
         .strip_prefix(root)
         .with_context(|| format!("File {} is outside root {}", path.display(), root.display()))?;
     let relative_str = relative.to_string_lossy().to_string();
-    let toon_filename = format!("{}.toon", relative.file_name().unwrap_or_default().to_string_lossy());
+    let toon_filename = format!(
+        "{}.toon",
+        relative.file_name().unwrap_or_default().to_string_lossy()
+    );
     let toon_relative = relative.with_file_name(toon_filename);
     let toon_path = root.join(".ai").join(toon_relative);
 
@@ -402,9 +410,8 @@ fn process_file(
 
     // Add function-level annotations (inline @toon comments)
     if !comments.function_annotations.is_empty() {
-        toon_data.function_annotations = Some(
-            comments.function_annotations.values().cloned().collect()
-        );
+        toon_data.function_annotations =
+            Some(comments.function_annotations.values().cloned().collect());
     }
 
     // Format TOON content
@@ -436,7 +443,8 @@ fn get_path_variants(path: &str) -> Vec<String> {
     let mut variants = vec![path.to_string()];
 
     // Without extension
-    if let Some(without_ext) = path.strip_suffix(".ts")
+    if let Some(without_ext) = path
+        .strip_suffix(".ts")
         .or_else(|| path.strip_suffix(".tsx"))
         .or_else(|| path.strip_suffix(".js"))
         .or_else(|| path.strip_suffix(".jsx"))
@@ -475,9 +483,10 @@ mod tests {
     #[test]
     fn test_dependency_graph_get_imported_by_with_data() {
         let mut graph = DependencyGraph::new();
-        graph
-            .imported_by
-            .insert("utils.ts".to_string(), vec!["main.ts".to_string(), "app.ts".to_string()]);
+        graph.imported_by.insert(
+            "utils.ts".to_string(),
+            vec!["main.ts".to_string(), "app.ts".to_string()],
+        );
 
         let result = graph.get_imported_by("utils.ts");
         assert_eq!(result.len(), 2);

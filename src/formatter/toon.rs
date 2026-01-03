@@ -28,8 +28,8 @@
 
 use crate::formatter::compress::{compress, compress_item};
 use crate::types::{
-    CalledByInfo, CallInfo, ExportInfo, FunctionAnnotation, ImportInfo, SignatureInfo,
-    ToonData, WhenEditingItem,
+    CallInfo, CalledByInfo, ExportInfo, FunctionAnnotation, ImportInfo, SignatureInfo, ToonData,
+    WhenEditingItem,
 };
 
 /// Format ToonData into TOON DOSE file content.
@@ -201,7 +201,11 @@ fn format_imports(imports: &[ImportInfo]) -> String {
         .iter()
         .map(|imp| format!("{},{}", imp.from, imp.items.join("|")))
         .collect();
-    format!("imports[{}]{{from,items}}: {}", imports.len(), items.join("; "))
+    format!(
+        "imports[{}]{{from,items}}: {}",
+        imports.len(),
+        items.join("; ")
+    )
 }
 
 /// Format a list field in compact single-line format.
@@ -253,7 +257,11 @@ fn format_calls(calls: &[CallInfo]) -> String {
         })
         .collect();
 
-    format!("calls[{}]{{target,methods}}: {}", by_target.len(), items.join("; "))
+    format!(
+        "calls[{}]{{target,methods}}: {}",
+        by_target.len(),
+        items.join("; ")
+    )
 }
 
 /// Format called-by (reverse call dependencies) in compact single-line format.
@@ -268,7 +276,12 @@ fn format_called_by(called_by: &[CalledByInfo]) -> String {
     } else {
         String::new()
     };
-    format!("called-by[{}]: {}{}", called_by.len(), items.join("; "), suffix)
+    format!(
+        "called-by[{}]: {}{}",
+        called_by.len(),
+        items.join("; "),
+        suffix
+    )
 }
 
 /// Format signatures for full type information.
@@ -277,7 +290,11 @@ fn format_signatures(signatures: &[SignatureInfo]) -> Vec<String> {
 
     for sig in signatures {
         // Collapse whitespace/newlines to single spaces
-        let collapsed = sig.signature.split_whitespace().collect::<Vec<_>>().join(" ");
+        let collapsed = sig
+            .signature
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
         // Truncate very long signatures
         let truncated = if collapsed.len() > 150 {
             format!("{}...", &collapsed[..147])
@@ -344,11 +361,7 @@ fn format_function_annotations(annotations: &[FunctionAnnotation]) -> Vec<String
 /// Parse TOON content back into ToonData.
 /// Used by validation tool.
 pub fn parse_toon(content: &str) -> ToonData {
-    let mut data = ToonData::new(
-        String::new(),
-        0,
-        Vec::new(),
-    );
+    let mut data = ToonData::new(String::new(), 0, Vec::new());
 
     for line in content.lines() {
         let trimmed = line.trim();
@@ -496,8 +509,14 @@ mod tests {
             "Comprehensive test purpose".to_string(),
             1000,
             vec![
-                ExportInfo { name: "foo".to_string(), kind: "fn".to_string() },
-                ExportInfo { name: "Bar".to_string(), kind: "class".to_string() },
+                ExportInfo {
+                    name: "foo".to_string(),
+                    kind: "fn".to_string(),
+                },
+                ExportInfo {
+                    name: "Bar".to_string(),
+                    kind: "class".to_string(),
+                },
             ],
         );
 
@@ -505,8 +524,14 @@ mod tests {
         data.invariants = Some(vec!["Must always return".to_string()]);
         data.do_not = Some(vec!["Never modify state".to_string()]);
         data.when_editing = Some(vec![
-            WhenEditingItem { text: "Critical".to_string(), important: true },
-            WhenEditingItem { text: "Normal".to_string(), important: false },
+            WhenEditingItem {
+                text: "Critical".to_string(),
+                important: true,
+            },
+            WhenEditingItem {
+                text: "Normal".to_string(),
+                important: false,
+            },
         ]);
         data.imports = Some(vec![ImportInfo {
             from: "react".to_string(),
@@ -579,10 +604,14 @@ mod tests {
     fn test_format_truncation() {
         let mut data = ToonData::new("Test".to_string(), 100, vec![]);
         data.imported_by = Some((0..15).map(|i| format!("file{}.ts", i)).collect());
-        data.called_by = Some((0..12).map(|i| CalledByInfo {
-            from: format!("mod{}.ts", i),
-            function: "fn".to_string(),
-        }).collect());
+        data.called_by = Some(
+            (0..12)
+                .map(|i| CalledByInfo {
+                    from: format!("mod{}.ts", i),
+                    function: "fn".to_string(),
+                })
+                .collect(),
+        );
         data.signatures = Some(vec![SignatureInfo {
             name: "longFunc".to_string(),
             kind: "fn".to_string(),
@@ -648,8 +677,14 @@ change-impacts: Breaks API
             "Test purpose".to_string(),
             1000,
             vec![
-                ExportInfo { name: "Component".to_string(), kind: "component".to_string() },
-                ExportInfo { name: "useHook".to_string(), kind: "hook".to_string() },
+                ExportInfo {
+                    name: "Component".to_string(),
+                    kind: "component".to_string(),
+                },
+                ExportInfo {
+                    name: "useHook".to_string(),
+                    kind: "hook".to_string(),
+                },
             ],
         );
 
@@ -682,8 +717,14 @@ change-impacts: Breaks API
     fn test_helper_functions() {
         // format_exports
         let exports = vec![
-            ExportInfo { name: "a".to_string(), kind: "const".to_string() },
-            ExportInfo { name: "b".to_string(), kind: "fn".to_string() },
+            ExportInfo {
+                name: "a".to_string(),
+                kind: "const".to_string(),
+            },
+            ExportInfo {
+                name: "b".to_string(),
+                kind: "fn".to_string(),
+            },
         ];
         assert_eq!(format_exports(&exports), "exports[2]: a(const), b(fn)");
 
@@ -696,5 +737,4 @@ change-impacts: Breaks API
         assert!(when[0].important);
         assert!(!when[1].important);
     }
-
 }

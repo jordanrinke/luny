@@ -1,7 +1,7 @@
 mod generate;
-mod validate;
 mod strip;
+mod validate;
 
 pub use generate::*;
-pub use validate::*;
 pub use strip::*;
+pub use validate::*;

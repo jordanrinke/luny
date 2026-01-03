@@ -27,13 +27,13 @@
 //!     - Check support: Call is_supported() to verify a file type is handled
 //!     - List extensions: Call supported_extensions() to get all registered extensions
 
-mod typescript;
-mod python;
-mod ruby;
 mod csharp;
 mod go;
+mod python;
+mod ruby;
 mod rust;
 pub mod toon_comment;
+mod typescript;
 
 use crate::types::{ASTInfo, ExtractedComments};
 use std::collections::HashMap;
@@ -41,12 +41,12 @@ use std::path::Path;
 use std::sync::Arc;
 use thiserror::Error;
 
-pub use typescript::TypeScriptParser;
-pub use python::PythonParser;
-pub use ruby::RubyParser;
 pub use csharp::CSharpParser;
 pub use go::GoParser;
+pub use python::PythonParser;
+pub use ruby::RubyParser;
 pub use rust::RustParser;
+pub use typescript::TypeScriptParser;
 
 #[derive(Error, Debug)]
 pub enum ParseError {
@@ -165,15 +165,69 @@ mod tests {
         let factory = ParserFactory::new();
 
         // Verify all language parsers are registered with correct language names
-        assert_eq!(factory.get_parser(Path::new("test.ts")).unwrap().language_name(), "typescript");
-        assert_eq!(factory.get_parser(Path::new("test.tsx")).unwrap().language_name(), "typescript");
-        assert_eq!(factory.get_parser(Path::new("test.js")).unwrap().language_name(), "typescript");
-        assert_eq!(factory.get_parser(Path::new("test.jsx")).unwrap().language_name(), "typescript");
-        assert_eq!(factory.get_parser(Path::new("test.py")).unwrap().language_name(), "python");
-        assert_eq!(factory.get_parser(Path::new("test.rb")).unwrap().language_name(), "ruby");
-        assert_eq!(factory.get_parser(Path::new("test.cs")).unwrap().language_name(), "csharp");
-        assert_eq!(factory.get_parser(Path::new("test.go")).unwrap().language_name(), "go");
-        assert_eq!(factory.get_parser(Path::new("test.rs")).unwrap().language_name(), "rust");
+        assert_eq!(
+            factory
+                .get_parser(Path::new("test.ts"))
+                .unwrap()
+                .language_name(),
+            "typescript"
+        );
+        assert_eq!(
+            factory
+                .get_parser(Path::new("test.tsx"))
+                .unwrap()
+                .language_name(),
+            "typescript"
+        );
+        assert_eq!(
+            factory
+                .get_parser(Path::new("test.js"))
+                .unwrap()
+                .language_name(),
+            "typescript"
+        );
+        assert_eq!(
+            factory
+                .get_parser(Path::new("test.jsx"))
+                .unwrap()
+                .language_name(),
+            "typescript"
+        );
+        assert_eq!(
+            factory
+                .get_parser(Path::new("test.py"))
+                .unwrap()
+                .language_name(),
+            "python"
+        );
+        assert_eq!(
+            factory
+                .get_parser(Path::new("test.rb"))
+                .unwrap()
+                .language_name(),
+            "ruby"
+        );
+        assert_eq!(
+            factory
+                .get_parser(Path::new("test.cs"))
+                .unwrap()
+                .language_name(),
+            "csharp"
+        );
+        assert_eq!(
+            factory
+                .get_parser(Path::new("test.go"))
+                .unwrap()
+                .language_name(),
+            "go"
+        );
+        assert_eq!(
+            factory
+                .get_parser(Path::new("test.rs"))
+                .unwrap()
+                .language_name(),
+            "rust"
+        );
 
         // Verify unsupported extensions return None
         assert!(factory.get_parser(Path::new("test.json")).is_none());
@@ -185,6 +239,9 @@ mod tests {
         let factory = ParserFactory::new();
         let mut exts = factory.supported_extensions();
         exts.sort();
-        assert_eq!(exts, vec!["cs", "go", "js", "jsx", "py", "rb", "rs", "ts", "tsx"]);
+        assert_eq!(
+            exts,
+            vec!["cs", "go", "js", "jsx", "py", "rb", "rs", "ts", "tsx"]
+        );
     }
 }

@@ -230,7 +230,9 @@ impl LanguageParser for RubyParser {
 
         if let Some(mat) = block_pattern.find(source) {
             let comment = mat.as_str();
-            let content = comment.trim_start_matches("=begin").trim_end_matches("=end");
+            let content = comment
+                .trim_start_matches("=begin")
+                .trim_end_matches("=end");
 
             let content = content
                 .lines()
@@ -295,22 +297,29 @@ mod tests {
     #[test]
     fn test_extract_ast_info() {
         let parser = RubyParser::new();
-        let info = parser.extract_ast_info(RB_FIXTURE, Path::new("sample.rb")).unwrap();
+        let info = parser
+            .extract_ast_info(RB_FIXTURE, Path::new("sample.rb"))
+            .unwrap();
 
         // Extract just classes and modules for clear assertion
-        let mut classes: Vec<_> = info.exports.iter()
+        let mut classes: Vec<_> = info
+            .exports
+            .iter()
             .filter(|e| e.kind == "class" || e.kind == "module")
             .map(|e| (&e.name[..], &e.kind[..]))
             .collect();
         classes.sort();
-        assert_eq!(classes, vec![
-            ("BaseService", "class"),
-            ("Loggable", "module"),
-            ("StringUtils", "module"),
-            ("UserConfig", "class"),
-            ("UserFactory", "module"),
-            ("UserService", "class"),
-        ]);
+        assert_eq!(
+            classes,
+            vec![
+                ("BaseService", "class"),
+                ("Loggable", "module"),
+                ("StringUtils", "module"),
+                ("UserConfig", "class"),
+                ("UserFactory", "module"),
+                ("UserService", "class"),
+            ]
+        );
 
         let mut imports: Vec<_> = info.imports.iter().map(|i| &i.from[..]).collect();
         imports.sort();
@@ -324,7 +333,9 @@ mod tests {
         let block = comments.file_block.unwrap();
         assert_eq!(block.purpose.unwrap(), "Sample Ruby fixture for testing the luny Ruby parser. This file contains various Ruby constructs including classes, modules, methods, and metaprogramming patterns to verify extraction works correctly.");
 
-        let stripped = parser.strip_toon_comments(RB_FIXTURE, "sample.rb.toon").unwrap();
+        let stripped = parser
+            .strip_toon_comments(RB_FIXTURE, "sample.rb.toon")
+            .unwrap();
         assert!(stripped.starts_with("# @toon -> sample.rb.toon"));
     }
 }

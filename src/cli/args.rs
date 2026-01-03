@@ -142,7 +142,9 @@ mod tests {
     fn test_parse_generate() {
         // Default values
         let cli = Cli::try_parse_from(["luny", "generate"]).unwrap();
-        let Commands::Generate(args) = cli.command else { panic!("Expected Generate") };
+        let Commands::Generate(args) = cli.command else {
+            panic!("Expected Generate")
+        };
         assert!(args.paths.is_empty());
         assert!(!args.dry_run);
         assert!(!args.force);
@@ -151,21 +153,37 @@ mod tests {
 
         // With paths
         let cli = Cli::try_parse_from(["luny", "generate", "src/", "lib/"]).unwrap();
-        let Commands::Generate(args) = cli.command else { panic!("Expected Generate") };
+        let Commands::Generate(args) = cli.command else {
+            panic!("Expected Generate")
+        };
         assert_eq!(args.paths.len(), 2);
 
         // Flags: --dry-run, --force, -f
         let cli = Cli::try_parse_from(["luny", "generate", "--dry-run"]).unwrap();
-        let Commands::Generate(args) = cli.command else { panic!("Expected Generate") };
+        let Commands::Generate(args) = cli.command else {
+            panic!("Expected Generate")
+        };
         assert!(args.dry_run);
 
         let cli = Cli::try_parse_from(["luny", "generate", "-f"]).unwrap();
-        let Commands::Generate(args) = cli.command else { panic!("Expected Generate") };
+        let Commands::Generate(args) = cli.command else {
+            panic!("Expected Generate")
+        };
         assert!(args.force);
 
         // Token thresholds
-        let cli = Cli::try_parse_from(["luny", "generate", "--token-warn", "300", "--token-error", "600"]).unwrap();
-        let Commands::Generate(args) = cli.command else { panic!("Expected Generate") };
+        let cli = Cli::try_parse_from([
+            "luny",
+            "generate",
+            "--token-warn",
+            "300",
+            "--token-error",
+            "600",
+        ])
+        .unwrap();
+        let Commands::Generate(args) = cli.command else {
+            panic!("Expected Generate")
+        };
         assert_eq!(args.token_warn, 300);
         assert_eq!(args.token_error, 600);
     }
@@ -175,7 +193,9 @@ mod tests {
     fn test_parse_validate() {
         // Default values
         let cli = Cli::try_parse_from(["luny", "validate"]).unwrap();
-        let Commands::Validate(args) = cli.command else { panic!("Expected Validate") };
+        let Commands::Validate(args) = cli.command else {
+            panic!("Expected Validate")
+        };
         assert!(args.paths.is_empty());
         assert!(!args.fix);
         assert!(!args.strict);
@@ -184,16 +204,22 @@ mod tests {
 
         // With path
         let cli = Cli::try_parse_from(["luny", "validate", ".ai/src/main.ts.toon"]).unwrap();
-        let Commands::Validate(args) = cli.command else { panic!("Expected Validate") };
+        let Commands::Validate(args) = cli.command else {
+            panic!("Expected Validate")
+        };
         assert_eq!(args.paths.len(), 1);
 
         // Flags: --fix, --strict
         let cli = Cli::try_parse_from(["luny", "validate", "--fix"]).unwrap();
-        let Commands::Validate(args) = cli.command else { panic!("Expected Validate") };
+        let Commands::Validate(args) = cli.command else {
+            panic!("Expected Validate")
+        };
         assert!(args.fix);
 
         let cli = Cli::try_parse_from(["luny", "validate", "--strict"]).unwrap();
-        let Commands::Validate(args) = cli.command else { panic!("Expected Validate") };
+        let Commands::Validate(args) = cli.command else {
+            panic!("Expected Validate")
+        };
         assert!(args.strict);
     }
 
@@ -202,24 +228,32 @@ mod tests {
     fn test_parse_strip() {
         // Basic usage
         let cli = Cli::try_parse_from(["luny", "strip", "test.ts"]).unwrap();
-        let Commands::Strip(args) = cli.command else { panic!("Expected Strip") };
+        let Commands::Strip(args) = cli.command else {
+            panic!("Expected Strip")
+        };
         assert_eq!(args.input, Some(PathBuf::from("test.ts")));
         assert!(args.output.is_none());
         assert!(args.ext.is_none());
 
         // With output
         let cli = Cli::try_parse_from(["luny", "strip", "test.ts", "-o", "output.ts"]).unwrap();
-        let Commands::Strip(args) = cli.command else { panic!("Expected Strip") };
+        let Commands::Strip(args) = cli.command else {
+            panic!("Expected Strip")
+        };
         assert_eq!(args.output, Some(PathBuf::from("output.ts")));
 
         // With ext (for stdin)
         let cli = Cli::try_parse_from(["luny", "strip", "--ext", "ts"]).unwrap();
-        let Commands::Strip(args) = cli.command else { panic!("Expected Strip") };
+        let Commands::Strip(args) = cli.command else {
+            panic!("Expected Strip")
+        };
         assert_eq!(args.ext, Some("ts".to_string()));
 
         // Stdin mode
         let cli = Cli::try_parse_from(["luny", "strip", "-", "--ext", "py"]).unwrap();
-        let Commands::Strip(args) = cli.command else { panic!("Expected Strip") };
+        let Commands::Strip(args) = cli.command else {
+            panic!("Expected Strip")
+        };
         assert_eq!(args.input, Some(PathBuf::from("-")));
     }
 

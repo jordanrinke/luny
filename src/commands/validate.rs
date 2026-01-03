@@ -270,7 +270,10 @@ fn fix_toon_file(toon_path: &Path, factory: &ParserFactory, root: &Path) -> Resu
         .as_ref()
         .and_then(|b| b.purpose.clone())
         .unwrap_or_else(|| {
-            let filename = source_path.file_stem().unwrap_or_default().to_string_lossy();
+            let filename = source_path
+                .file_stem()
+                .unwrap_or_default()
+                .to_string_lossy();
             format!("{} module", filename)
         });
 
@@ -319,7 +322,10 @@ mod tests {
 
     #[test]
     fn test_validation_result_new() {
-        let result = ValidationResult::new("src/main.ts".to_string(), ".ai/src/main.ts.toon".to_string());
+        let result = ValidationResult::new(
+            "src/main.ts".to_string(),
+            ".ai/src/main.ts.toon".to_string(),
+        );
         assert_eq!(result.source_path, "src/main.ts");
         assert_eq!(result.toon_path, ".ai/src/main.ts.toon");
         assert!(result.errors.is_empty());
@@ -517,7 +523,10 @@ mod tests {
         .unwrap();
 
         // Should have warning about missing export 'foo'
-        assert!(result.warnings.iter().any(|w| w.contains("foo") && w.contains("not documented")));
+        assert!(result
+            .warnings
+            .iter()
+            .any(|w| w.contains("foo") && w.contains("not documented")));
     }
 
     #[test]
@@ -529,7 +538,8 @@ mod tests {
         fs::write(temp_dir.path().join("test.ts"), source).unwrap();
 
         // Create TOON file with extra export
-        let toon_content = "purpose: Test module\ntokens: ~50\nexports[2]: x(const), removed(function)";
+        let toon_content =
+            "purpose: Test module\ntokens: ~50\nexports[2]: x(const), removed(function)";
         fs::write(temp_dir.path().join(".ai/test.ts.toon"), toon_content).unwrap();
 
         let args = ValidateArgs {
@@ -551,7 +561,10 @@ mod tests {
         .unwrap();
 
         // Should have warning about extra export
-        assert!(result.warnings.iter().any(|w| w.contains("removed") && w.contains("no longer exists")));
+        assert!(result
+            .warnings
+            .iter()
+            .any(|w| w.contains("removed") && w.contains("no longer exists")));
     }
 
     #[test]
@@ -766,7 +779,11 @@ invariants: Always export x
         fs::write(ai_src.join("main.ts.toon"), toon_content).unwrap();
 
         // Create invalid TOON file in lib (missing source)
-        fs::write(ai_lib.join("missing.ts.toon"), "purpose: Missing\ntokens: ~50\nexports[0]:").unwrap();
+        fs::write(
+            ai_lib.join("missing.ts.toon"),
+            "purpose: Missing\ntokens: ~50\nexports[0]:",
+        )
+        .unwrap();
 
         let args = ValidateArgs {
             paths: vec![ai_src.clone()], // Only validate src

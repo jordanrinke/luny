@@ -27,17 +27,37 @@ export function getUser(): User { return { id: "1" }; }
     std::fs::write(temp_dir.path().join("auth.ts"), source).expect("write");
 
     bin()
-        .args(["--root", temp_dir.path().to_string_lossy().as_ref(), "generate"])
+        .args([
+            "--root",
+            temp_dir.path().to_string_lossy().as_ref(),
+            "generate",
+        ])
         .status()
         .expect("run");
 
     let output = std::fs::read_to_string(temp_dir.path().join(".ai/auth.ts.toon")).expect("read");
 
     // Verify exact expected content
-    assert!(output.starts_with("purpose: Auth module\n"), "Got:\n{}", output);
-    assert!(output.contains("exports[2]: User(interface), getUser(fn)"), "Got:\n{}", output);
-    assert!(output.contains("invariants: Tokens expire in 15min"), "Got:\n{}", output);
-    assert!(output.contains("fn:getUser: invariants: caller must be authed"), "Got:\n{}", output);
+    assert!(
+        output.starts_with("purpose: Auth module\n"),
+        "Got:\n{}",
+        output
+    );
+    assert!(
+        output.contains("exports[2]: User(interface), getUser(fn)"),
+        "Got:\n{}",
+        output
+    );
+    assert!(
+        output.contains("invariants: Tokens expire in 15min"),
+        "Got:\n{}",
+        output
+    );
+    assert!(
+        output.contains("fn:getUser: invariants: caller must be authed"),
+        "Got:\n{}",
+        output
+    );
 }
 
 #[test]
@@ -66,16 +86,8 @@ fn e2e_generate_creates_toon_files() {
 fn e2e_generate_is_deterministic_for_same_inputs() {
     let temp_dir = TempDir::new().expect("temp dir");
     std::fs::create_dir_all(temp_dir.path().join("src")).expect("mkdir src");
-    std::fs::write(
-        temp_dir.path().join("src/a.ts"),
-        "export const a = 1;\n",
-    )
-    .expect("write a.ts");
-    std::fs::write(
-        temp_dir.path().join("src/b.ts"),
-        "export const b = 2;\n",
-    )
-    .expect("write b.ts");
+    std::fs::write(temp_dir.path().join("src/a.ts"), "export const a = 1;\n").expect("write a.ts");
+    std::fs::write(temp_dir.path().join("src/b.ts"), "export const b = 2;\n").expect("write b.ts");
 
     let root = temp_dir.path().to_string_lossy();
 
@@ -107,8 +119,7 @@ fn e2e_generate_is_deterministic_for_same_inputs() {
 #[test]
 fn e2e_validate_fix_regenerates_invalid_toon_file() {
     let temp_dir = TempDir::new().expect("temp dir");
-    std::fs::write(temp_dir.path().join("main.ts"), "export const x = 1;\n")
-        .expect("write source");
+    std::fs::write(temp_dir.path().join("main.ts"), "export const x = 1;\n").expect("write source");
 
     // Create an invalid TOON file (missing purpose)
     std::fs::create_dir_all(temp_dir.path().join(".ai")).expect("mkdir .ai");
@@ -126,8 +137,12 @@ fn e2e_validate_fix_regenerates_invalid_toon_file() {
         .expect("run validate --fix");
     assert!(fix_status.success());
 
-    let fixed = std::fs::read_to_string(temp_dir.path().join(".ai/main.ts.toon")).expect("read fixed");
-    assert!(fixed.contains("purpose:"), "expected regenerated TOON to include purpose");
+    let fixed =
+        std::fs::read_to_string(temp_dir.path().join(".ai/main.ts.toon")).expect("read fixed");
+    assert!(
+        fixed.contains("purpose:"),
+        "expected regenerated TOON to include purpose"
+    );
 
     // Strict validate should pass after fix.
     let strict_status = bin()
@@ -136,5 +151,3 @@ fn e2e_validate_fix_regenerates_invalid_toon_file() {
         .expect("run validate --strict");
     assert!(strict_status.success());
 }
-
-

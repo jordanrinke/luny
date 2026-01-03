@@ -271,7 +271,9 @@ impl LanguageParser for PythonParser {
 
         if let Some(mat) = docstring_pattern.find(source) {
             let comment = mat.as_str();
-            let content = comment.trim_start_matches("\"\"\"").trim_end_matches("\"\"\"");
+            let content = comment
+                .trim_start_matches("\"\"\"")
+                .trim_end_matches("\"\"\"");
 
             // Remove @toon marker
             let content = content
@@ -337,26 +339,48 @@ mod tests {
     #[test]
     fn test_extract_ast_info() {
         let parser = PythonParser::new();
-        let info = parser.extract_ast_info(PY_FIXTURE, Path::new("sample.py")).unwrap();
+        let info = parser
+            .extract_ast_info(PY_FIXTURE, Path::new("sample.py"))
+            .unwrap();
 
         // Exact export assertions
-        let mut exports: Vec<_> = info.exports.iter().map(|e| (&e.name[..], &e.kind[..])).collect();
+        let mut exports: Vec<_> = info
+            .exports
+            .iter()
+            .map(|e| (&e.name[..], &e.kind[..]))
+            .collect();
         exports.sort();
-        assert_eq!(exports, vec![
-            ("BaseService", "class"),
-            ("Cache", "class"),
-            ("UserConfig", "class"),
-            ("UserService", "class"),
-            ("create_user", "fn"),
-            ("fetch_user_async", "fn"),
-            ("log_calls", "fn"),
-            ("validate_email", "fn"),
-        ]);
+        assert_eq!(
+            exports,
+            vec![
+                ("BaseService", "class"),
+                ("Cache", "class"),
+                ("UserConfig", "class"),
+                ("UserService", "class"),
+                ("create_user", "fn"),
+                ("fetch_user_async", "fn"),
+                ("log_calls", "fn"),
+                ("validate_email", "fn"),
+            ]
+        );
 
         // Exact import assertions (includes nested import uuid in create_user)
         let mut imports: Vec<_> = info.imports.iter().map(|i| &i.from[..]).collect();
         imports.sort();
-        assert_eq!(imports, vec!["abc", "asyncio", "collections", "dataclasses", "functools", "json", "os", "typing", "uuid"]);
+        assert_eq!(
+            imports,
+            vec![
+                "abc",
+                "asyncio",
+                "collections",
+                "dataclasses",
+                "functools",
+                "json",
+                "os",
+                "typing",
+                "uuid"
+            ]
+        );
     }
 
     #[test]
@@ -367,7 +391,9 @@ mod tests {
 
         assert_eq!(block.purpose.unwrap(), "Sample Python fixture for testing the luny Python parser. This file contains various Python constructs including classes, functions, decorators, and type hints to verify extraction works correctly.");
 
-        let stripped = parser.strip_toon_comments(PY_FIXTURE, "sample.py.toon").unwrap();
+        let stripped = parser
+            .strip_toon_comments(PY_FIXTURE, "sample.py.toon")
+            .unwrap();
         assert!(stripped.starts_with("# @toon -> sample.py.toon"));
     }
 }

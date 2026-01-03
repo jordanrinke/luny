@@ -1,5 +1,5 @@
-mod toon;
 mod compress;
+mod toon;
 
-pub use toon::*;
 pub use compress::*;
+pub use toon::*;

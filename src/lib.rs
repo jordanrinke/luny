@@ -29,9 +29,8 @@ pub mod types;
 // Re-export main types for convenience
 pub use cli::{Cli, Commands, GenerateArgs, StripArgs, ValidateArgs};
 pub use formatter::{format_toon, parse_toon};
-pub use parser::{LanguageParser, ParserFactory, ParseError};
+pub use parser::{LanguageParser, ParseError, ParserFactory};
 pub use types::{
-    ASTInfo, CallInfo, CalledByInfo, ExportInfo, ExtractedComments, FunctionAnnotation,
-    ImportInfo, SignatureInfo, ToonCommentBlock, ToonData, ValidationResult,
-    WhenEditingItem,
+    ASTInfo, CallInfo, CalledByInfo, ExportInfo, ExtractedComments, FunctionAnnotation, ImportInfo,
+    SignatureInfo, ToonCommentBlock, ToonData, ValidationResult, WhenEditingItem,
 };
