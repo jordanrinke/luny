@@ -438,11 +438,15 @@ impl GoParser {
             .unwrap_or_default();
 
         let signature = format!("{}{}", params, result);
+        let start_line = node.start_position().row + 1;
+        let end_line = node.end_position().row + 1;
 
         Some(SignatureInfo {
             name,
             kind: "fn".to_string(),
             signature,
+            start_line,
+            end_line,
         })
     }
 
@@ -475,11 +479,15 @@ impl GoParser {
             .unwrap_or_default();
 
         let signature = format!("{} {}{}", receiver, params, result);
+        let start_line = node.start_position().row + 1;
+        let end_line = node.end_position().row + 1;
 
         Some(SignatureInfo {
             name,
             kind: "method".to_string(),
             signature,
+            start_line,
+            end_line,
         })
     }
 
@@ -504,11 +512,15 @@ impl GoParser {
         };
 
         let signature = self.summarize_type(type_node, source);
+        let start_line = spec.start_position().row + 1;
+        let end_line = spec.end_position().row + 1;
 
         Some(SignatureInfo {
             name,
             kind: kind.to_string(),
             signature,
+            start_line,
+            end_line,
         })
     }
 

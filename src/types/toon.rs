@@ -76,6 +76,10 @@ pub struct SignatureInfo {
     pub kind: String,
     /// Full type signature (e.g., "(props: Props) => JSX.Element")
     pub signature: String,
+    /// Starting line number in the source file (1-indexed)
+    pub start_line: usize,
+    /// Ending line number in the source file (1-indexed)
+    pub end_line: usize,
 }
 
 /// When-editing item with optional importance flag

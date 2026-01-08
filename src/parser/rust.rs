@@ -515,11 +515,15 @@ impl RustParser {
             .unwrap_or_default();
 
         let signature = format!("{}{}{}", type_params, params, return_type);
+        let start_line = node.start_position().row + 1;
+        let end_line = node.end_position().row + 1;
 
         Some(SignatureInfo {
             name,
             kind: "fn".to_string(),
             signature,
+            start_line,
+            end_line,
         })
     }
 
@@ -553,11 +557,15 @@ impl RustParser {
         let signature = format!("{} {{ {} }}", type_params, fields)
             .trim()
             .to_string();
+        let start_line = node.start_position().row + 1;
+        let end_line = node.end_position().row + 1;
 
         Some(SignatureInfo {
             name,
             kind: "struct".to_string(),
             signature,
+            start_line,
+            end_line,
         })
     }
 
@@ -626,11 +634,15 @@ impl RustParser {
         let signature = format!("{} {{ {} }}", type_params, variants.join(" | "))
             .trim()
             .to_string();
+        let start_line = node.start_position().row + 1;
+        let end_line = node.end_position().row + 1;
 
         Some(SignatureInfo {
             name,
             kind: "enum".to_string(),
             signature,
+            start_line,
+            end_line,
         })
     }
 
@@ -679,11 +691,15 @@ impl RustParser {
         let signature = format!("{} {{ {} }}", type_params, methods.join("; "))
             .trim()
             .to_string();
+        let start_line = node.start_position().row + 1;
+        let end_line = node.end_position().row + 1;
 
         Some(SignatureInfo {
             name,
             kind: "trait".to_string(),
             signature,
+            start_line,
+            end_line,
         })
     }
 
@@ -715,11 +731,15 @@ impl RustParser {
         } else {
             format!("{} = {}", type_params, type_value)
         };
+        let start_line = node.start_position().row + 1;
+        let end_line = node.end_position().row + 1;
 
         Some(SignatureInfo {
             name,
             kind: "type".to_string(),
             signature,
+            start_line,
+            end_line,
         })
     }
 }

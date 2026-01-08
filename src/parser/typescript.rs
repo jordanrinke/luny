@@ -785,11 +785,15 @@ impl TypeScriptParser {
         } else {
             format!("{} {}", params, return_type)
         };
+        let start_line = node.start_position().row + 1;
+        let end_line = node.end_position().row + 1;
 
         Some(SignatureInfo {
             name,
             kind,
             signature,
+            start_line,
+            end_line,
         })
     }
 
@@ -832,10 +836,15 @@ impl TypeScriptParser {
             return None;
         }
 
+        let start_line = node.start_position().row + 1;
+        let end_line = node.end_position().row + 1;
+
         Some(SignatureInfo {
             name,
             kind,
             signature,
+            start_line,
+            end_line,
         })
     }
 
@@ -906,10 +915,15 @@ impl TypeScriptParser {
             return None;
         }
 
+        let start_line = node.start_position().row + 1;
+        let end_line = node.end_position().row + 1;
+
         Some(SignatureInfo {
             name,
             kind: "type".to_string(),
             signature,
+            start_line,
+            end_line,
         })
     }
 
@@ -952,11 +966,15 @@ impl TypeScriptParser {
         };
 
         let signature = format!("{}{} {}", type_params, extends_clause, fields_summary);
+        let start_line = node.start_position().row + 1;
+        let end_line = node.end_position().row + 1;
 
         Some(SignatureInfo {
             name,
             kind: "interface".to_string(),
             signature: signature.trim().to_string(),
+            start_line,
+            end_line,
         })
     }
 

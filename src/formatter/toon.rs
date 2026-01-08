@@ -301,7 +301,10 @@ fn format_signatures(signatures: &[SignatureInfo]) -> Vec<String> {
         } else {
             collapsed
         };
-        lines.push(format!("  {}({}): {}", sig.name, sig.kind, truncated));
+        lines.push(format!(
+            "  {}({})@{}-{}: {}",
+            sig.name, sig.kind, sig.start_line, sig.end_line, truncated
+        ));
     }
 
     lines
@@ -550,6 +553,8 @@ mod tests {
             name: "greet".to_string(),
             kind: "fn".to_string(),
             signature: "(s: string) => string".to_string(),
+            start_line: 42,
+            end_line: 50,
         }]);
         data.gotchas = Some(vec!["Watch for nulls".to_string()]);
         data.flows = Some(vec!["Init -> Process -> Return".to_string()]);
@@ -616,6 +621,8 @@ mod tests {
             name: "longFunc".to_string(),
             kind: "fn".to_string(),
             signature: "a".repeat(200),
+            start_line: 100,
+            end_line: 150,
         }]);
 
         let output = format_toon(&data);
@@ -623,7 +630,7 @@ mod tests {
         assert!(output.contains("(+5 more)"));
         assert!(output.contains("called-by[12]:"));
         assert!(output.contains("(+2 more)"));
-        assert!(output.contains("longFunc(fn): "));
+        assert!(output.contains("longFunc(fn)@100-150: "));
         assert!(output.contains("..."));
     }
 
