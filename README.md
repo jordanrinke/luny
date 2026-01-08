@@ -49,10 +49,31 @@ luny watch src/
 
 # Validate .toon files against source
 luny validate
-
-# Strip @dose comments when reading into LLM (saves tokens)
-luny strip src/main.ts
 ```
+
+## AI Tool Integration
+
+Signatures include line numbers, so AI tools can jump directly to relevant code:
+
+```
+signatures[3]:
+  createUser(fn)@45-67: (name: string, email: string) => Promise<User>
+  validateEmail(fn)@70-82: (email: string) => boolean
+  UserService(class)@12-120: { ... }
+```
+
+**Recommended**: Add a rule to your AI tool's system prompt or project instructions:
+
+```
+When working with this codebase, read .ai/*.toon files first for context.
+Use the line numbers in signatures (e.g., @45-67) to read only the specific
+lines you need rather than entire files. This is more targeted and uses fewer tokens.
+```
+
+This approach:
+- **Fewer tokens**: Read 20 lines instead of 500
+- **No preprocessing**: Works with files as-is, no stripping needed
+- **Native tool support**: All editors and AI tools support line-range reads
 
 ## What Luny Generates vs What You Write
 
@@ -229,11 +250,11 @@ purpose: Auth context managing session state, token refresh, and platform storag
 tokens: ~652
 exports[6]: User(interface), AuthContextValue(interface), AuthContext(context), refreshToken(fn), useAuth(hook), AuthProvider(fn)
 signatures[5]:
-  User(interface): { id: string; email: string; roles: string[] }
-  AuthContextValue(interface): { user: User | null; isAuthenticated: boolean; ... }
-  refreshToken(fn): () : Promise<void>
-  useAuth(hook): () : AuthContextValue | null
-  AuthProvider(fn): ({ children }: { children: React.ReactNode })
+  User(interface)@5-9: { id: string; email: string; roles: string[] }
+  AuthContextValue(interface)@11-16: { user: User | null; isAuthenticated: boolean; ... }
+  refreshToken(fn)@45-52: () : Promise<void>
+  useAuth(hook)@54-58: () : AuthContextValue | null
+  AuthProvider(fn)@60-95: ({ children }: { children: React.ReactNode })
 when-editing: !Always validate token expiry before checking permissions; Update User type if adding new claims
 invariants: Access tokens expire in 15 minutes; Only one refresh request in flight; Web uses HTTP-only cookies; mobile uses SecureStore
 do-not: Never store tokens in localStorage (XSS vulnerability); Never skip loading state check before accessing user
@@ -270,17 +291,17 @@ luny validate --fix        # Regenerate invalid files
 luny validate --strict     # Treat warnings as errors
 ```
 
-### `luny strip`
+### `luny strip` (Legacy)
 
-Remove `@dose` comments when feeding source to an LLM. Since the LLM already has semantic context from the `.toon` file, the embedded comments are redundant—stripping them saves tokens.
+> **Note**: Using line numbers from signatures is now the preferred approach—it's simpler and uses fewer tokens. See [AI Tool Integration](#ai-tool-integration).
+
+Remove `@dose` comments when feeding entire source files to an LLM:
 
 ```bash
 luny strip <FILE>              # Output to stdout
 luny strip <FILE> -o out.ts    # Output to file
 luny strip - --ext ts          # Read from stdin
 ```
-
-**LLM Integration**: Configure your AI tool to pipe files through `luny strip` when reading source files that have corresponding `.toon` DOSE files. This avoids duplicate context and reduces token usage.
 
 ### `luny watch`
 
